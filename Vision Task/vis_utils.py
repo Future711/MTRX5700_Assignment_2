@@ -480,6 +480,9 @@ def visualize_predictions(model, test_loader, class_names, device, num_samples=1
     
     # Get predictions
     # TODO get predcitions
+    with torch.no_grad():
+        outputs = model(inputs.to(device))
+        _, preds = outputs.max(1)
     
     # Display images and predictions
     for i in range(num_samples):
@@ -575,11 +578,13 @@ def plot_confusion_matrix(model, test_loader, class_names, device, criterion):
     
     # Calculate confusion matrix
     # TODO create confusion matrix
+    cm = confusion_matrix(all_targets, all_preds)
     
     # Print classification report
     class_names_list = [class_names[i] for i in range(len(class_names))]
     print("\nClassification Report:")
     # TODO Implement classification report
+    print(classification_report(all_targets, all_preds, target_names=class_names_list))
     # Plot confusion matrix
     plt.figure(figsize=(10, 8))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 

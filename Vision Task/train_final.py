@@ -71,7 +71,14 @@ def train(model, train_loader, optimizer, criterion, epoch, epochs):
         
         # Statistics
         # TODO calculate the loss and acc
-    
+        loss = loss.item()
+        train_loss += loss
+        _, predicted = outputs.max(1)
+        total += targets.size(0)
+        correct += predicted.eq(targets).sum().item()
+
+    avg_loss = train_loss / len(train_loader)
+    acc = 100. * correct / total
     return avg_loss, acc
 
 
@@ -110,6 +117,14 @@ def validate(model, val_loader, criterion):
             
             # Statistics
             # TODO calculate the loss and acc
+            loss = loss.item()
+            val_loss += loss
+            _, predicted = outputs.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+
+    avg_loss = val_loss / len(val_loader)
+    acc = 100. * correct / total
     
     return avg_loss, acc
 
@@ -264,9 +279,18 @@ def main():
     
     # Loss function
     # TODO Define loss function
+    criterion = nn.CrossEntropyLoss()
     
     # Set optimizer
     # TODO set the optimizer
+    if args.optimizer.lower() == 'sgd':
+        optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+    elif args.optimizer.lower() == 'adam':
+        optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    elif args.optimizer.lower() == 'rmsprop':
+        optimizer = optim.RMSprop(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    else:
+        raise ValueError(f"Unsupported optimizer: {args.optimizer}")
     
     # If resuming from checkpoint, also restore optimizer state
     if checkpoint is not None and 'optimizer' in checkpoint:
