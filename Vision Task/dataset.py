@@ -296,30 +296,45 @@ class TrafficSignProcessor:
         mean = self.config['mean']
         std = self.config['std']
         
-# Define data transformations
+        # Define data transformations
         if augment_train:
             # Apply data augmentation to training data
             # TODO make some data augmentation
             train_transform = transforms.Compose([
-                # Basic transformations
                 transforms.Resize((img_size, img_size)),
-                # Data augmentation
 
+                # Photometric (dominant)
+                transforms.RandomApply([
+                    transforms.ColorJitter(
+                        brightness=0.4,
+                        contrast=0.4,
+                        saturation=0.2,
+                        hue=0.05
+                    )
+                ], p=0.7),
 
-                # Data Agumentation goes here
+                transforms.RandomGrayscale(p=0.1),
 
-                transforms.RandomRotation(15),
-                transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
-                transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-                # transforms.RandomPerspective(distortion_scale=0.2, p=0.5),  # simulate camera angle
-                # transforms.RandomGrayscale(p=0.1),                          # simulate poor lighting
-                # transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),   # simulate blur/motion
-                
-                # Convert to tensor and normalize
+                transforms.RandomApply([
+                    transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0))
+                ], p=0.2),
+
+                # Geometric (reduced)
+                transforms.RandomApply([
+                    transforms.RandomRotation(6)
+                ], p=0.3),
+
+                transforms.RandomApply([
+                    transforms.RandomAffine(
+                        degrees=0,
+                        translate=(0.05, 0.05)
+                    )
+                ], p=0.3),
+
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std),
-                # transforms.RandomErasing(p=0.2, scale=(0.02, 0.1))         # simulate occlusion
 
+                transforms.RandomErasing(p=0.15, scale=(0.02, 0.08))
             ])
             print("Training data augmentation enabled")
         else:
