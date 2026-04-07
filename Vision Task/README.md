@@ -493,3 +493,82 @@ A: CPU training is expected to be slower. You can reduce the number of epochs (`
 
 **Q: Accuracy stays flat / does not improve?**
 A: Double-check that the loss calculation and backpropagation in your TODOs are implemented correctly. You can also try adjusting the learning rate (`--lr 0.001`).
+
+
+# Results
+
+# Results 
+
+10 epochs, no data augmentation: 
+
+Testing the best model...
+Test Results: Loss: 0.3108 | Acc: 89.26% (964/1080)
+
+Classification Report:
+                      precision    recall  f1-score   support
+
+                Stop       1.00      1.00      1.00       270
+          Turn right       0.97      0.97      0.97       210
+           Turn left       0.99      1.00      1.00       120
+          Ahead only       0.99      0.72      0.84       390
+Roundabout mandatory       0.45      0.98      0.62        90
+
+            accuracy                           0.89      1080
+           macro avg       0.88      0.93      0.88      1080
+        weighted avg       0.94      0.89      0.90      1080
+
+
+20 epochs, no data augmentation: 
+
+Test Results: Loss: 0.1642 | Acc: 95.74% (1034/1080)
+
+Classification Report:
+                      precision    recall  f1-score   support
+
+                Stop       1.00      1.00      1.00       270
+          Turn right       0.97      0.99      0.98       210
+           Turn left       0.94      1.00      0.97       120
+          Ahead only       0.99      0.90      0.94       390
+Roundabout mandatory       0.74      0.97      0.84        90
+
+            accuracy                           0.96      1080
+           macro avg       0.93      0.97      0.95      1080
+        weighted avg       0.96      0.96      0.96      1080
+
+
+
+20 epochs, data augmentation: 
+
+Test Results: Loss: 0.2157 | Acc: 94.17% (1017/1080)
+
+Classification Report:
+                      precision    recall  f1-score   support
+
+                Stop       1.00      1.00      1.00       270
+          Turn right       1.00      1.00      1.00       210
+           Turn left       1.00      1.00      1.00       120
+          Ahead only       0.99      0.84      0.91       390
+Roundabout mandatory       0.59      0.98      0.74        90
+
+            accuracy                           0.94      1080
+           macro avg       0.92      0.96      0.93      1080
+        weighted avg       0.96      0.94      0.95      1080
+
+20 epochs, some data augmentation (only lab suggested ones):  Easily the best
+
+Testing the best model...
+Test Results: Loss: 0.0800 | Acc: 97.22% (1050/1080)
+
+Classification Report:
+                      precision    recall  f1-score   support
+
+                Stop       1.00      1.00      1.00       270
+          Turn right       0.91      1.00      0.95       210
+           Turn left       1.00      1.00      1.00       120
+          Ahead only       0.99      0.93      0.96       390
+Roundabout mandatory       0.92      0.97      0.94        90
+
+            accuracy                           0.97      1080
+           macro avg       0.96      0.98      0.97      1080
+        weighted avg       0.97      0.97      0.97      1080
+ 

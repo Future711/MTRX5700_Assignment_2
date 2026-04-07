@@ -296,7 +296,7 @@ class TrafficSignProcessor:
         mean = self.config['mean']
         std = self.config['std']
         
-        # Define data transformations
+# Define data transformations
         if augment_train:
             # Apply data augmentation to training data
             # TODO make some data augmentation
@@ -308,11 +308,18 @@ class TrafficSignProcessor:
 
                 # Data Agumentation goes here
 
-
+                transforms.RandomRotation(15),
+                transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
+                transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+                # transforms.RandomPerspective(distortion_scale=0.2, p=0.5),  # simulate camera angle
+                # transforms.RandomGrayscale(p=0.1),                          # simulate poor lighting
+                # transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),   # simulate blur/motion
                 
                 # Convert to tensor and normalize
                 transforms.ToTensor(),
-                transforms.Normalize(mean, std)
+                transforms.Normalize(mean, std),
+                # transforms.RandomErasing(p=0.2, scale=(0.02, 0.1))         # simulate occlusion
+
             ])
             print("Training data augmentation enabled")
         else:
