@@ -1,0 +1,32 @@
+# ROS bags 
+*.bag
+*.db3
+*.mcap
+
+# Dataset files
+*.p
+*.pkl
+*.pickle
+
+# Extracted images from bags 
+*.png
+*.jpg
+*.jpeg
+
+# Trained model checkpoints
+*.pt
+*.pth
+*.ckpt
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+venv/
+*.egg-info/
+
+# Large output dirs
+data/
+datasets/
+bags/
+outputs/
