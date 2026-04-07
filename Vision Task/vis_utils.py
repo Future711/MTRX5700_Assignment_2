@@ -385,7 +385,7 @@ def visualize_dataset_statistics(X_train, y_train, X_valid, y_valid, X_test, y_t
     print("Dataset visualization complete.")
 
 
-def visualize_training_results(train_loss_list, train_acc_list, val_loss_list, val_acc_list, best_acc, optimizer, learning_rate, batch_size, scheduler_type):
+def visualize_training_results(train_loss_list, train_acc_list, val_loss_list, val_acc_list, best_acc, optimizer, learning_rate, batch_size, scheduler_type, results_dir):
     """
     Visualize training results
     
@@ -399,6 +399,7 @@ def visualize_training_results(train_loss_list, train_acc_list, val_loss_list, v
         learning_rate (float): Learning rate
         batch_size (int): Batch size
         scheduler_type (str): Scheduler type
+        results_dir (str): Directory to save results
     """
     plt.figure(figsize=(12, 10))
     
@@ -436,12 +437,12 @@ def visualize_training_results(train_loss_list, train_acc_list, val_loss_list, v
     plt.tight_layout()
     
     # Save the chart
-    os.makedirs('results', exist_ok=True)
-    plt.savefig(os.path.join('results', 'training_results.png'))
+    os.makedirs(results_dir, exist_ok=True)
+    plt.savefig(os.path.join(results_dir, 'training_results.png'))
     plt.show()
 
 
-def visualize_predictions(model, test_loader, class_names, device, num_samples=16):
+def visualize_predictions(model, test_loader, class_names, device, results_dir, num_samples=16):
     """
     Visualize predictions
     
@@ -451,6 +452,7 @@ def visualize_predictions(model, test_loader, class_names, device, num_samples=1
         class_names (dict): Dictionary mapping class indices to names
         device (torch.device): Device to run the model on
         num_samples (int): Number of samples to visualize
+        results_dir (str): Directory to save results
     """
     model.eval()
     
@@ -519,12 +521,12 @@ def visualize_predictions(model, test_loader, class_names, device, num_samples=1
     plt.tight_layout()
     
     # Save the image
-    os.makedirs('results', exist_ok=True)
-    plt.savefig(os.path.join('results', 'predictions.png'))
+    os.makedirs(results_dir, exist_ok=True)
+    plt.savefig(os.path.join(results_dir, 'predictions.png'))
     plt.show()
 
 
-def plot_confusion_matrix(model, test_loader, class_names, device, criterion):
+def plot_confusion_matrix(model, test_loader, class_names, device, criterion, results_dir):
     """
     Plot confusion matrix
     
@@ -534,7 +536,7 @@ def plot_confusion_matrix(model, test_loader, class_names, device, criterion):
         class_names (dict): Dictionary mapping class indices to names
         device (torch.device): Device to run the model on
         criterion: Loss criterion
-        
+        results_dir (str): Directory to save results
     Returns:
         dict: Dictionary containing test results
     """
@@ -595,8 +597,8 @@ def plot_confusion_matrix(model, test_loader, class_names, device, criterion):
     plt.title('Confusion Matrix')
     
     # Save confusion matrix
-    os.makedirs('results', exist_ok=True)
-    plt.savefig(os.path.join('results', 'confusion_matrix.png'))
+    os.makedirs(results_dir, exist_ok=True)
+    plt.savefig(os.path.join(results_dir, 'confusion_matrix.png'))
     plt.show()
     
     return {

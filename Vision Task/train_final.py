@@ -13,6 +13,13 @@ import torch.optim as optim
 import os
 import time
 import argparse
+
+################################################################################
+import csv
+import re
+import json
+################################################################################
+
 from tqdm import tqdm
 import numpy as np
 
@@ -24,6 +31,36 @@ import vis_utils
 
 # Device selection
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+################################################################################
+def append_csv_row(csv_path, fieldnames, row):
+    """Append one row to a CSV file and create header automatically if needed."""
+    file_exists = os.path.exists(csv_path)
+    write_header = (not file_exists) or os.path.getsize(csv_path) == 0
+
+    with open(csv_path, mode='a', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+
+
+def get_next_result_id(results_csv_path):
+    """Return the next integer run id for results CSV files."""
+    if not os.path.exists(results_csv_path) or os.path.getsize(results_csv_path) == 0:
+        return 1
+
+    max_id = 0
+    with open(results_csv_path, mode='r', newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            raw_id = str(row.get('id', '')).strip()
+            match = re.match(r'^(\d+)', raw_id)
+            if match:
+                max_id = max(max_id, int(match.group(1)))
+
+    return max_id + 1
+################################################################################
 
 
 # Training function
@@ -181,7 +218,18 @@ def main():
     parser.add_argument('--momentum', default=0.9, type=float, help='SGD momentum')
     parser.add_argument('--step_size', default=30, type=int, help='Learning rate step size')
     parser.add_argument('--gamma', default=0.1, type=float, help='Learning rate decay rate')
+    parser.add_argument('--augment_train', action='store_true', help='Train with data augmentation')
     args = parser.parse_args()
+
+    ################################################################################
+    # Logging setup
+    augment_train = args.augment_train
+    run_id = f"{args.optimizer.lower()}_lr_{args.lr}_bs_{args.batch_size}_ep_{args.epochs}_{augment_train}_scheduler_{args.scheduler.lower()}_weightdecay_{args.weight_decay}_0"
+    results_dir = './results/' + run_id
+    os.makedirs(results_dir, exist_ok=True)
+
+    legacy_results_path = os.path.join('./results/results.csv')
+    ################################################################################
     
     # Set random seed for reproducibility
     set_seed(42)
@@ -193,6 +241,10 @@ def main():
     val_acc_list = []
     best_acc = 0
     start_epoch = 0  # Important: ensure start_epoch has a default value
+
+    ################################################################################
+    best_epoch = -1
+    ################################################################################
     
     # Load data
     processor = TrafficSignProcessor()
@@ -207,7 +259,7 @@ def main():
         processor.load_data(training_file, validation_file, testing_file)
     
     # Create datasets
-    train_dataset, valid_dataset, test_dataset = processor.create_datasets(augment_train=True, include_original=False)
+    train_dataset, valid_dataset, test_dataset = processor.create_datasets(augment_train=augment_train, include_original=False)
     train_loader, val_loader, test_loader = processor.create_data_loaders(
         train_dataset, valid_dataset, test_dataset, batch_size=args.batch_size, num_workers=args.workers)
     
@@ -242,7 +294,7 @@ def main():
             lr_str = f"_lr_{args.lr}" if args.lr != 0.01 else ""
             scheduler_str = "" if args.scheduler.lower() != "none" else "_no_scheduler"
             
-            checkpoint_path = f'./checkpoint/ckpt_{opt_name}{lr_str}{scheduler_str}.pth'
+            checkpoint_path = f'./checkpoint/ckpt_{opt_name}{lr_str}_bs_{args.batch_size}_ep_{args.epochs}_{augment_train}{scheduler_str}.pth'
             
             if not os.path.exists(checkpoint_path):
                 print(f"Warning: Specified checkpoint {checkpoint_path} not found, trying to load best_model.pth")
@@ -334,6 +386,11 @@ def main():
         # Check if this is the best model
         is_best = val_acc > best_acc
         best_acc = max(val_acc, best_acc)
+
+        ################################################################################
+        if is_best:
+            best_epoch = epoch + 1
+        ################################################################################
         
         # Save history
         history = (train_loss_list, train_acc_list, val_loss_list, val_acc_list)
@@ -342,7 +399,7 @@ def main():
         opt_name = args.optimizer.lower()
         lr_str = f"_lr_{args.lr}" if args.lr != 0.01 else ""
         scheduler_str = "" if args.scheduler.lower() != "none" else "_no_scheduler"
-        filepath = f'./checkpoint/ckpt_{opt_name}{lr_str}{scheduler_str}.pth'
+        filepath = f'./checkpoint/ckpt_{opt_name}{lr_str}_bs_{args.batch_size}_ep_{args.epochs}_{augment_train}{scheduler_str}.pth'
         
         # Save checkpoint
         if is_best:
@@ -365,16 +422,92 @@ def main():
         print("Warning: Best model not found, using current model for testing")
     
     # Test
-    test_results = vis_utils.plot_confusion_matrix(model, test_loader, processor.class_names, device, criterion)
+    test_results = vis_utils.plot_confusion_matrix(model, test_loader, processor.class_names, device, criterion, results_dir)
+
+    ################################################################################
+    # Write per-run summary log
+    # Build augmentation profile matching dataset.py create_datasets()
+    if augment_train:
+        augmentation_profile = {
+            "enabled": True,
+            "transforms": [
+                {"name": "Resize", "size": [processor.config['img_size'], processor.config['img_size']]},
+                {"name": "RandomRotation", "degrees": 15},
+                {"name": "RandomAffine", "degrees": 0, "translate": [0.1, 0.1]},
+                {"name": "ColorJitter", "brightness": 0.2, "contrast": 0.2, "saturation": 0.2},
+                {"name": "ToTensor"},
+                {"name": "Normalize", "mean": processor.config['mean'], "std": processor.config['std']}
+            ]
+        }
+    else:
+        augmentation_profile = {
+            "enabled": False,
+            "transforms": [
+                {"name": "Resize", "size": [processor.config['img_size'], processor.config['img_size']]},
+                {"name": "ToTensor"},
+                {"name": "Normalize", "mean": processor.config['mean'], "std": processor.config['std']}
+            ]
+        }
+
+    json_log = {
+        "run_id": run_id,
+        "hyperparameters": {
+            "lr": args.lr,
+            "batch_size": args.batch_size,
+            "epochs": args.epochs,
+            "optimizer": args.optimizer.lower(),
+            "scheduler": args.scheduler.lower(),
+            "weight_decay": args.weight_decay,
+            "momentum": args.momentum,
+            "step_size": args.step_size,
+            "gamma": args.gamma,
+            "workers": args.workers,
+            "use_processed": args.use_processed
+        },
+        "augmentation": augmentation_profile,
+        "model": {
+            "architecture": "ResNet18",
+            "num_classes": 5,
+            "class_names": processor.class_names
+        },
+        "results": {
+            "best_epoch": best_epoch,
+            "best_val_acc": best_acc,
+            "final_test_acc": test_results['accuracy']
+        }
+    }
+
+    json_log_path = os.path.join(results_dir, 'config.json')
+    with open(json_log_path, 'w') as f:
+        json.dump(json_log, f, indent=4)
+    print(f"Hyperparameter log saved to {json_log_path}")
+
+    # Keep legacy results.csv format for quick comparisons
+    legacy_id = get_next_result_id(legacy_results_path)
+    legacy_row = {
+        'id': legacy_id,
+        'lr': args.lr,
+        'batch_size': args.batch_size,
+        'epochs': args.epochs,
+        'optimizer': args.optimizer.capitalize(),
+        'augmented': augment_train,
+        'val_accuracy': f"{best_acc/100:.4f}"
+    }
+    append_csv_row(
+        legacy_results_path,
+        ['id', 'lr', 'batch_size', 'epochs', 'optimizer', 'augmented', 'val_accuracy'],
+        legacy_row
+    )
+    ################################################################################
     
     # Visualize results
     vis_utils.visualize_training_results(
         train_loss_list, train_acc_list, val_loss_list, val_acc_list, 
-        best_acc, args.optimizer, args.lr, args.batch_size, args.scheduler
+        best_acc, args.optimizer, args.lr, args.batch_size, args.scheduler, results_dir
     )
     
     # Visualize predictions
-    vis_utils.visualize_predictions(model, test_loader, processor.class_names, device)
+    vis_utils.visualize_predictions(model, test_loader, processor.class_names, device, results_dir)
     
     print(f"\nTraining complete! Best validation accuracy: {best_acc:.2f}%, Test accuracy: {test_results['accuracy']:.2f}%")
 
