@@ -224,7 +224,7 @@ def main():
     ################################################################################
     # Logging setup
     augment_train = args.augment_train
-    run_id = f"{args.optimizer.lower()}_lr_{args.lr}_bs_{args.batch_size}_ep_{args.epochs}_{augment_train}_scheduler_{args.scheduler.lower()}_weightdecay_{args.weight_decay}_0"
+    run_id = f"{args.optimizer.lower()}_lr_{args.lr}_bs_{args.batch_size}_ep_{args.epochs}_{augment_train}_scheduler_{args.scheduler.lower()}_weightdecay_{args.weight_decay}"
     results_dir = './results/' + run_id
     os.makedirs(results_dir, exist_ok=True)
 
