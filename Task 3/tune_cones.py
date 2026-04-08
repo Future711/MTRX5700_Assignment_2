@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 from matplotlib.patches import Rectangle
 
-IMAGE_DIR = "images_left_1/"
+IMAGE_DIR = "images_right_2/"
 images = sorted(os.listdir(IMAGE_DIR))
 
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))

@@ -2,9 +2,15 @@ import os
 import cv2
 import numpy as np
 
-IMAGE_DIR = "images_left_1/"
-CONE_DIR = "output_cones/"
-SIGN_DIR = "output_signs/"
+# IMAGE_DIR = "images_right_2/"
+# CONE_DIR = "output_cones_4/"
+# SIGN_DIR = "output_signs_4/"
+
+IMAGE_DIR = "multi_cone_3_images/"
+CONE_DIR = "multi_output_cones_3/"
+SIGN_DIR = "multioutput_signs_1/"
+
+
 os.makedirs(CONE_DIR, exist_ok=True)
 os.makedirs(SIGN_DIR, exist_ok=True)
 
@@ -19,8 +25,8 @@ def detect_cones(frame):
     hsv = cv2.merge([h, s, v])
 
     # Red/orange hue ranges
-    mask1 = cv2.inRange(hsv, np.array([0,   77, 40]), np.array([8,  255, 255]))
-    mask2 = cv2.inRange(hsv, np.array([165, 77, 40]), np.array([180, 255, 255]))
+    mask1 = cv2.inRange(hsv, np.array([0,   105, 40]), np.array([8,  255, 255]))
+    mask2 = cv2.inRange(hsv, np.array([165, 105, 40]), np.array([180, 255, 255]))
     mask = cv2.bitwise_or(mask1, mask2)
 
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((7, 7)))
@@ -30,15 +36,42 @@ def detect_cones(frame):
     boxes = []
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        if area < 2558:
+        if area < 800:
             continue
         x, y, w, h = cv2.boundingRect(cnt)
-        if h < 1.2473214285714285 * w:
+        if h < 0.5 * w:
             continue
-        if area / (w * h) < 0.35:
+        if area / (w * h) < 0.18:
             continue
         boxes.append((x, y, w, h))
-    return boxes
+
+    # Merge boxes that are vertically close and horizontally overlapping
+    # Merge boxes that overlap horizontally (same column = same cylinder)
+    changed = True
+    while changed:
+        changed = False
+        merged = []
+        used = [False] * len(boxes)
+        for i, (x1, y1, w1, h1) in enumerate(boxes):
+            if used[i]:
+                continue
+            mx, my, mx2, my2 = x1, y1, x1 + w1, y1 + h1
+            for j in range(len(boxes)):
+                if i == j or used[j]:
+                    continue
+                x2, y2, w2, h2 = boxes[j]
+                jx2, jy2 = x2 + w2, y2 + h2
+                if x2 < mx2 + 20 and jx2 > mx - 20:  # horizontal ranges overlap or within 20px
+                    mx  = min(mx,  x2)
+                    my  = min(my,  y2)
+                    mx2 = max(mx2, jx2)
+                    my2 = max(my2, jy2)
+                    used[j] = True
+                    changed = True
+            used[i] = True
+            merged.append((mx, my, mx2 - mx, my2 - my))
+        boxes = merged
+    return merged
 
 
 def detect_sign(cone_crop):
@@ -92,6 +125,9 @@ def detect_sign(cone_crop):
     return cone_crop[y1:y2, x1:x2]
 
 
+total = 0
+correct = 0
+
 for img_name in sorted(os.listdir(IMAGE_DIR)):
     frame = cv2.imread(os.path.join(IMAGE_DIR, img_name))
     if frame is None:
@@ -101,15 +137,33 @@ for img_name in sorted(os.listdir(IMAGE_DIR)):
 
     base = os.path.splitext(img_name)[0]
     n_signs = 0
+    annotated = frame.copy()
     for i, (x, y, w, h) in enumerate(boxes):
-        cone_crop = frame[y:y+h, x:x+w]
-        cv2.imwrite(os.path.join(CONE_DIR, f"{base}_cone{i}.png"), cone_crop)
+        # Draw bright green bounding box on the original image
+        cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+        # Still crop for sign detection
+        side = max(w, h)
+        cx, cy = x + w // 2, y + h // 2
+        half = side // 2
+        fH, fW = frame.shape[:2]
+        x1 = max(0, cx - half)
+        y1 = max(0, cy - half)
+        x2 = min(fW, cx + half)
+        y2 = min(fH, cy + half)
+        cone_crop = frame[y1:y2, x1:x2]
 
         sign = detect_sign(cone_crop)
         if sign is not None:
-            cv2.imwrite(os.path.join(SIGN_DIR, f"{base}_cone{i}_sign.png"), sign)
             n_signs += 1
 
-    print(f"{img_name}: {len(boxes)} cone(s), {n_signs} sign(s)")
+    cv2.imwrite(os.path.join(CONE_DIR, f"{base}_annotated.png"), annotated)
 
-print(f"Done. Cones → {CONE_DIR}  Signs → {SIGN_DIR}")
+    total += 1
+    if len(boxes) == 1:
+        correct += 1
+    print(f"{img_name}: {len(boxes)} cone(s), {n_signs} sign(s) {'✓' if len(boxes) == 1 else '✗'}")
+
+accuracy = correct / total * 100 if total > 0 else 0
+print(f"\nDone. Cones → {CONE_DIR}  Signs → {SIGN_DIR}")
+print(f"Accuracy: {correct}/{total} images with exactly 1 cone detected ({accuracy:.1f}%)")
