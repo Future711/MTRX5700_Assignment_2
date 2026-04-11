@@ -33,3 +33,8 @@ outputs/
 
 # VS Code settings
 .vscode/
+
+# ROS 2
+build/
+install/
+log/
