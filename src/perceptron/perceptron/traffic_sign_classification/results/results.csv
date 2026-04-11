@@ -1,0 +1,41 @@
+id,lr,batch_size,epochs,optimizer,augmented,val_accuracy
+1,0.001,64,10,Adam,False,0.8810
+2,0.001,64,20,Adam,False,0.8929
+3,0.001,64,20,Adam,True,0.9310
+4,0.001,64,20,Adam,True,0.9381 # From example code
+5,0.0001,64,100,Adam,False,0.8667
+6,0.0005,64,100,Adam,False,0.9214
+7,0.001,64,100,Adam,False,0.9262
+8,0.005,64,100,Adam,False,0.9524
+9,0.01,64,100,Adam,False,0.9810
+10,0.05,64,100,Adam,False,0.9738
+11,0.01,64,100,Rmsprop,False,0.9738
+12,0.005,64,100,Rmsprop,False,0.9881
+13,0.05,64,100,Rmsprop,False,0.9452
+14,0.001,64,100,Rmsprop,False,0.9429
+15,0.1,64,100,Sgd,False,0.9214
+16,0.05,64,100,Sgd,False,0.9476
+17,0.5,64,100,Sgd,False,0.9833
+18,0.003,64,100,Rmsprop,False,0.9738
+19,0.004,64,100,Rmsprop,False,0.9786
+20,0.006,64,100,Rmsprop,False,0.9619
+21,0.007,64,100,Rmsprop,False,0.9381
+22,0.005,64,100,Rmsprop,False,0.9714
+23,0.005,64,100,Rmsprop,False,0.9548
+24,0.005,32,100,Rmsprop,False,0.9762
+25,0.005,128,100,Rmsprop,False,0.9571
+26,0.005,64,100,Rmsprop,False,0.9357
+27,0.005,64,100,Rmsprop,False,0.9833
+# Augmentation
+# Color jitter
+28,0.005,64,100,Rmsprop,True,0.9857
+29,0.005,64,200,Rmsprop,True,0.9643
+30,0.005,64,100,Rmsprop,True,0.9857
+31,0.005,64,100,Rmsprop,True,0.9714
+32,0.005,64,100,Rmsprop,True,0.9786
+33,0.005,64,100,Rmsprop,True,0.9833
+34,0.005,64,100,Rmsprop,True,0.9929
+35,0.005,64,100,Rmsprop,True,0.9952
+36,0.005,64,100,Rmsprop,True,0.9929
+37,0.005,64,100,Rmsprop,True,1.0000
+38,0.01,64,100,Rmsprop,False,0.9667
