@@ -30,3 +30,6 @@ data/
 datasets/
 bags/
 outputs/
+
+# VS Code settings
+.vscode/
