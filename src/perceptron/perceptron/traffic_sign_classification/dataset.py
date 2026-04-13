@@ -2,9 +2,10 @@
 # coding: utf-8
 
 """
-Traffic Sign Dataset Handling
--------------------------------------------------
-Classes and utilities for loading, processing, and preparing traffic sign datasets
+Traffic sign dataset utilities.
+
+This module provides dataset, preprocessing, and DataLoader helper classes used
+for training and evaluating the traffic sign classifier.
 """
 
 import pickle
@@ -20,11 +21,13 @@ from sklearn.model_selection import train_test_split
 
 
 def set_seed(seed=42):
-    """
-    Set random seed to ensure experiment reproducibility
-    
+    """Set random seeds for reproducible experiments.
+
     Args:
-        seed (int): Random seed value
+        seed: Random seed value.
+
+    Returns:
+        None.
     """
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -38,19 +41,20 @@ def set_seed(seed=42):
 
 
 class TrafficSignDataset(Dataset):
-    """
-    Traffic Sign Dataset Class
-    """
+    """PyTorch dataset wrapper for traffic sign images and labels."""
+
     def __init__(self, features, labels, transform=None, orig_transform=None, class_mapping=None):
-        """
-        Initialize dataset
-        
+        """Initialize the dataset object.
+
         Args:
-            features (numpy.ndarray): Image data
-            labels (numpy.ndarray): Labels
-            transform (callable, optional): Data transformer (for returning preprocessed images)
-            orig_transform (callable, optional): Original image transformer (if returning original images with basic processing)
-            class_mapping (dict, optional): Class label mapping
+            features: Image data array.
+            labels: Label array matching features.
+            transform: Optional preprocessing transform for model inputs.
+            orig_transform: Optional transform for returning original images.
+            class_mapping: Optional additional class-id-to-name mapping.
+
+        Returns:
+            None.
         """
         self.features = features
         self.labels = labels
@@ -71,9 +75,23 @@ class TrafficSignDataset(Dataset):
             self.class_names.update(class_mapping)
     
     def __len__(self):
+        """Return the number of samples in the dataset.
+
+        Returns:
+            Number of labels in the dataset.
+        """
         return len(self.labels)
     
     def __getitem__(self, idx):
+        """Return one dataset sample.
+
+        Args:
+            idx: Sample index.
+
+        Returns:
+            If orig_transform is set: (image_tensor, original_tensor, label).
+            Otherwise: (image_tensor, label).
+        """
         image = self.features[idx]
         label = self.labels[idx]
         
@@ -109,23 +127,24 @@ class TrafficSignDataset(Dataset):
 
 
 class TrafficSignProcessor:
-    """
-    Traffic Sign Data Processor: Responsible for data loading, filtering, analysis and visualization
-    """
+    """Data processing helper for loading and preparing traffic sign datasets."""
+
     def __init__(self, config=None):
-        """
-        Initialize data processor
-        
+        """Initialize data processor with default or custom configuration.
+
         Args:
-            config (dict, optional): Configuration parameters
+            config: Optional dictionary overriding default processing config.
+
+        Returns:
+            None.
         """
         # Default configuration
         self.config = {
             'balance_data': True,
             'max_samples_per_class': 300,
             'valid_classes': [14, 33, 34, 35, 40],
-            'class_mapping': {14: 0, 33: 1, 34: 2, 35: 3, 40: 4}, #TODO Find the class mapping,
-            'img_size': 32, #TODO Find the image size,
+            'class_mapping': {14: 0, 33: 1, 34: 2, 35: 3, 40: 4},
+            'img_size': 32,
             'mean': [0.485, 0.456, 0.406],  # ImageNet mean
             'std': [0.229, 0.224, 0.225]    # ImageNet std
         }
@@ -152,18 +171,18 @@ class TrafficSignProcessor:
         self.y_test = None
         
     def load_data(self, training_file, validation_file=None, testing_file=None, balance_data=None, max_samples_per_class=None):
-        """
-        Load and preprocess traffic sign dataset
-        
+        """Load, filter, map, and optionally balance dataset splits.
+
         Args:
-            training_file (str): Path to the training data pickle file
-            validation_file (str, optional): Path to the validation data pickle file
-            testing_file (str, optional): Path to the testing data pickle file
-            balance_data (bool, optional): Whether to balance training data
-            max_samples_per_class (int, optional): Maximum samples per class when balancing
-            
+            training_file: Path to the training pickle file.
+            validation_file: Optional path to the validation pickle file.
+            testing_file: Optional path to the testing pickle file.
+            balance_data: Optional override for class balancing behavior.
+            max_samples_per_class: Optional cap per class for balancing.
+
         Returns:
-            tuple: Preprocessed training, validation and testing data and labels
+            Tuple of processed arrays:
+                (X_train, y_train, X_valid, y_valid, X_test, y_test).
         """
         if balance_data is None:
             balance_data = self.config['balance_data']
@@ -235,17 +254,16 @@ class TrafficSignProcessor:
                 X_filtered_test, y_filtered_test)
     
     def _filter_and_map_data(self, features, labels, balance=False, max_count=None):
-        """
-        Filter data to include only specified classes and map to new labels
-        
+        """Filter desired classes and remap labels to compact class ids.
+
         Args:
-            features (numpy.ndarray): Image features
-            labels (numpy.ndarray): Labels
-            balance (bool): Whether to balance classes
-            max_count (int, optional): Maximum samples per class when balancing
-            
+            features: Input image feature array.
+            labels: Original label array.
+            balance: Whether to cap the number of samples per class.
+            max_count: Maximum samples per class when balancing.
+
         Returns:
-            tuple: Filtered features and mapped labels
+            Tuple of filtered features and mapped labels.
         """
         valid_classes = self.config['valid_classes']
         class_mapping = self.config['class_mapping']
@@ -276,15 +294,14 @@ class TrafficSignProcessor:
         return np.array(filtered_features), np.array(filtered_labels)
     
     def create_datasets(self, augment_train=True, include_original=False):
-        """
-        Create PyTorch dataset objects
-        
+        """Create PyTorch Dataset objects for train, validation, and test splits.
+
         Args:
-            augment_train (bool): Whether to apply data augmentation to training data
-            include_original (bool): Whether to include original images in dataset (for visualization comparison)
-            
+            augment_train: Whether to apply augmentation to training samples.
+            include_original: Whether to also return original images per sample.
+
         Returns:
-            tuple: Training, validation and test dataset objects
+            Tuple of (train_dataset, valid_dataset, test_dataset).
         """
         # Check if data is loaded
         if self.X_train is None or self.y_train is None:
@@ -299,19 +316,19 @@ class TrafficSignProcessor:
         # Define data transformations
         if augment_train:
             # Apply data augmentation to training data
-            # TODO make some data augmentation
             train_transform = transforms.Compose([
-                transforms.RandomResizedCrop(img_size, scale=(0.8, 1.0), ratio=(0.9, 1.1)),
+                transforms.Resize((img_size, img_size)),
+
                 transforms.RandomApply([
                     transforms.ColorJitter(
                         brightness=0.4,
                         contrast=0.4,
-                        saturation=0.4,
-                        hue=0.1
+                        saturation=0.2,
+                        hue=0.05
                     )
                 ], p=0.7),
 
-                transforms.RandomGrayscale(p=0.2),
+                transforms.RandomGrayscale(p=0.1),
 
                 transforms.RandomApply([
                     transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0))
@@ -322,13 +339,16 @@ class TrafficSignProcessor:
                 ], p=0.3),
 
                 transforms.RandomApply([
-                    transforms.RandomAffine(degrees=0, translate=(0.05, 0.05))
+                    transforms.RandomAffine(
+                        degrees=0,
+                        translate=(0.05, 0.05)
+                    )
                 ], p=0.3),
 
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std),
 
-                transforms.RandomErasing(p=0.3, scale=(0.05, 0.2))
+                transforms.RandomErasing(p=0.15, scale=(0.02, 0.08))
             ])
             print("Training data augmentation enabled")
         else:
@@ -386,16 +406,17 @@ class TrafficSignProcessor:
         return train_dataset, valid_dataset, test_dataset
     
     def create_data_loaders(self, train_dataset, valid_dataset=None, test_dataset=None, batch_size=32, num_workers=4):
-        """
-        Create PyTorch data loaders
-        
+        """Create DataLoader objects for available dataset splits.
+
         Args:
-            train_dataset, valid_dataset, test_dataset: Dataset objects
-            batch_size (int): Batch size
-            num_workers (int): Number of worker processes for data loading
-            
+            train_dataset: Training dataset.
+            valid_dataset: Optional validation dataset.
+            test_dataset: Optional test dataset.
+            batch_size: Batch size.
+            num_workers: Number of worker processes for loading data.
+
         Returns:
-            tuple: Training, validation and test data loaders
+            Tuple of (train_loader, valid_loader, test_loader).
         """
         print(f"Creating data loaders (batch_size={batch_size}, workers={num_workers})...")
         
@@ -445,12 +466,14 @@ class TrafficSignProcessor:
         return train_loader, valid_loader, test_loader
     
     def save_processed_data(self, output_dir='./processed_data', filename_prefix='traffic_sign'):
-        """
-        Save preprocessed data
-        
+        """Save processed train/valid/test arrays and config to disk.
+
         Args:
-            output_dir (str): Output directory
-            filename_prefix (str): Filename prefix
+            output_dir: Destination directory.
+            filename_prefix: Prefix for generated file names.
+
+        Returns:
+            None.
         """
         # Check if data is loaded
         if self.X_train is None or self.y_train is None:
@@ -480,15 +503,15 @@ class TrafficSignProcessor:
         print(f"Preprocessed data saved to {output_dir}")
     
     def load_processed_data(self, data_dir, filename_prefix='traffic_sign'):
-        """
-        Load preprocessed data
-        
+        """Load preprocessed train/valid/test arrays and config from disk.
+
         Args:
-            data_dir (str): Data directory
-            filename_prefix (str): Filename prefix
-            
+            data_dir: Directory containing saved processed files.
+            filename_prefix: Prefix used when the files were saved.
+
         Returns:
-            tuple: Preprocessed training, validation and test data and labels
+            Tuple of loaded arrays:
+                (X_train, y_train, X_valid, y_valid, X_test, y_test).
         """
         train_file = os.path.join(data_dir, f"{filename_prefix}_train.npz")
         valid_file = os.path.join(data_dir, f"{filename_prefix}_valid.npz")

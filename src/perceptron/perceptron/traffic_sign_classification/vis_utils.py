@@ -2,9 +2,10 @@
 # coding: utf-8
 
 """
-Visualization Utilities for Traffic Sign Classification
--------------------------------------------------
-Utilities for visualizing datasets, training results, and model predictions
+Visualization helpers for training and evaluation analysis.
+
+This module provides plotting utilities for dataset inspection, model training
+curves, predictions, and confusion-matrix reports.
 """
 
 import numpy as np
@@ -19,15 +20,17 @@ from sklearn.metrics import confusion_matrix, classification_report
 
 
 def visualize_class_examples(X, y, class_names, n_samples=5, figsize=(15, 3*5)):
-    """
-    Visualize example images for each class
-    
+    """Show sample images for each class label.
+
     Args:
-        X (numpy.ndarray): Image data
-        y (numpy.ndarray): Labels
-        class_names (dict): Dictionary mapping class indices to names
-        n_samples (int): Number of samples to display per class
-        figsize (tuple): Figure size
+        X: Image array.
+        y: Label array.
+        class_names: Mapping from class id to class name.
+        n_samples: Number of samples displayed per class.
+        figsize: Figure size for plotting.
+
+    Returns:
+        None.
     """
     n_classes = len(set(y))
     
@@ -66,11 +69,13 @@ def visualize_class_examples(X, y, class_names, n_samples=5, figsize=(15, 3*5)):
 
 
 def visualize_image_intensity(images):
-    """
-    Visualize image intensity distribution
-    
+    """Plot image mean-intensity and intensity-standard-deviation histograms.
+
     Args:
-        images (numpy.ndarray): Image data
+        images: Image array.
+
+    Returns:
+        None.
     """
     if len(images) == 0:
         print("No image data available for analysis")
@@ -115,13 +120,15 @@ def visualize_image_intensity(images):
 
 
 def visualize_before_after_preprocessing(images, n_samples=5, preprocessing_func=None):
-    """
-    Visualize images before and after preprocessing
-    
+    """Display original images alongside their preprocessed outputs.
+
     Args:
-        images (numpy.ndarray): Original image data
-        n_samples (int): Number of samples to display
-        preprocessing_func (callable): Preprocessing function, accepts an image and returns processed image
+        images: Original image array.
+        n_samples: Number of random samples to display.
+        preprocessing_func: Optional preprocessing function.
+
+    Returns:
+        None.
     """
     if len(images) == 0:
         print("No image data available for analysis")
@@ -171,16 +178,18 @@ def visualize_before_after_preprocessing(images, n_samples=5, preprocessing_func
 
 
 def visualize_batch(loader, class_names, n_samples=8, figsize=(12, 6), mean=None, std=None):
-    """
-    Visualize a batch of images
-    
+    """Visualize one mini-batch from a DataLoader.
+
     Args:
-        loader (DataLoader): Data loader
-        class_names (dict): Dictionary mapping class indices to names
-        n_samples (int): Number of samples to display
-        figsize (tuple): Figure size
-        mean (list): Mean values for denormalization
-        std (list): Standard deviation values for denormalization
+        loader: DataLoader yielding model inputs and labels.
+        class_names: Mapping from class id to class name.
+        n_samples: Number of samples to display.
+        figsize: Figure size for plotting.
+        mean: Mean values used for normalization.
+        std: Standard deviation values used for normalization.
+
+    Returns:
+        None.
     """
     if mean is None:
         mean = [0.485, 0.456, 0.406]  # ImageNet mean
@@ -249,13 +258,15 @@ def visualize_batch(loader, class_names, n_samples=8, figsize=(12, 6), mean=None
 
 
 def visualize_augmentations(image, n_augmentations=5, figsize=(15, 3)):
-    """
-    Visualize data augmentation effects
-    
+    """Display random augmentation variants of one image.
+
     Args:
-        image (numpy.ndarray): Original image
-        n_augmentations (int): Number of augmented images to generate
-        figsize (tuple): Figure size
+        image: Input image array.
+        n_augmentations: Number of augmented samples to generate.
+        figsize: Figure size for plotting.
+
+    Returns:
+        None.
     """
     # Ensure image is 3D, if grayscale, copy to 3 channels
     if len(image.shape) == 2:
@@ -295,12 +306,19 @@ def visualize_augmentations(image, n_augmentations=5, figsize=(15, 3)):
 
 
 def visualize_dataset_statistics(X_train, y_train, X_valid, y_valid, X_test, y_test, class_names):
-    """
-    Visualize dataset statistics
-    
+    """Plot summary statistics for dataset splits.
+
     Args:
-        X_train, y_train, X_valid, y_valid, X_test, y_test: Data and labels
-        class_names (dict): Dictionary mapping class indices to names
+        X_train: Training images.
+        y_train: Training labels.
+        X_valid: Validation images.
+        y_valid: Validation labels.
+        X_test: Test images.
+        y_test: Test labels.
+        class_names: Mapping from class id to class name.
+
+    Returns:
+        None.
     """
     print("\nDrawing data visualization charts...")
     
@@ -386,20 +404,22 @@ def visualize_dataset_statistics(X_train, y_train, X_valid, y_valid, X_test, y_t
 
 
 def visualize_training_results(train_loss_list, train_acc_list, val_loss_list, val_acc_list, best_acc, optimizer, learning_rate, batch_size, scheduler_type, results_dir):
-    """
-    Visualize training results
-    
+    """Plot and save training/validation curves and run summary text.
+
     Args:
-        train_loss_list (list): Training loss history
-        train_acc_list (list): Training accuracy history
-        val_loss_list (list): Validation loss history
-        val_acc_list (list): Validation accuracy history
-        best_acc (float): Best validation accuracy
-        optimizer (str): Optimizer name
-        learning_rate (float): Learning rate
-        batch_size (int): Batch size
-        scheduler_type (str): Scheduler type
-        results_dir (str): Directory to save results
+        train_loss_list: Training loss per epoch.
+        train_acc_list: Training accuracy per epoch.
+        val_loss_list: Validation loss per epoch.
+        val_acc_list: Validation accuracy per epoch.
+        best_acc: Best validation accuracy observed.
+        optimizer: Optimizer name.
+        learning_rate: Learning rate value.
+        batch_size: Batch size.
+        scheduler_type: Scheduler type.
+        results_dir: Directory for saving output figures.
+
+    Returns:
+        None.
     """
     plt.figure(figsize=(12, 10))
     
@@ -443,16 +463,18 @@ def visualize_training_results(train_loss_list, train_acc_list, val_loss_list, v
 
 
 def visualize_predictions(model, test_loader, class_names, device, results_dir, num_samples=16):
-    """
-    Visualize predictions
-    
+    """Visualize model predictions against ground-truth labels.
+
     Args:
-        model (nn.Module): Trained model
-        test_loader (DataLoader): Test data loader
-        class_names (dict): Dictionary mapping class indices to names
-        device (torch.device): Device to run the model on
-        num_samples (int): Number of samples to visualize
-        results_dir (str): Directory to save results
+        model: Trained model.
+        test_loader: Test DataLoader.
+        class_names: Mapping from class id to class name.
+        device: Torch device used for inference.
+        results_dir: Directory for saving output figures.
+        num_samples: Maximum number of samples to visualize.
+
+    Returns:
+        None.
     """
     model.eval()
     
@@ -481,7 +503,6 @@ def visualize_predictions(model, test_loader, class_names, device, results_dir, 
     fig, axes = plt.subplots(rows, cols, figsize=(cols*3, rows*3))
     
     # Get predictions
-    # TODO get predcitions
     with torch.no_grad():
         outputs = model(inputs.to(device))
         _, preds = outputs.max(1)
@@ -527,18 +548,19 @@ def visualize_predictions(model, test_loader, class_names, device, results_dir, 
 
 
 def plot_confusion_matrix(model, test_loader, class_names, device, criterion, results_dir):
-    """
-    Plot confusion matrix
-    
+    """Evaluate on the test split and plot the confusion matrix.
+
     Args:
-        model (nn.Module): Trained model
-        test_loader (DataLoader): Test data loader
-        class_names (dict): Dictionary mapping class indices to names
-        device (torch.device): Device to run the model on
-        criterion: Loss criterion
-        results_dir (str): Directory to save results
+        model: Trained model.
+        test_loader: Test DataLoader.
+        class_names: Mapping from class id to class name.
+        device: Torch device used for inference.
+        criterion: Loss function for evaluation.
+        results_dir: Directory for saving output figures.
+
     Returns:
-        dict: Dictionary containing test results
+        Dictionary with loss, accuracy, confusion matrix, predictions, and
+        target labels.
     """
     model.eval()
     test_loss = 0
@@ -611,13 +633,20 @@ def plot_confusion_matrix(model, test_loader, class_names, device, criterion, re
 
 
 def analyze_dataset(X_train, y_train, X_valid, y_valid, X_test, y_test, class_names, visualize=True):
-    """
-    Analyze dataset and print statistics
-    
+    """Print dataset statistics and optionally generate plots.
+
     Args:
-        X_train, y_train, X_valid, y_valid, X_test, y_test: Data and labels
-        class_names (dict): Dictionary mapping class indices to names
-        visualize (bool): Whether to create visualization charts
+        X_train: Training images.
+        y_train: Training labels.
+        X_valid: Validation images.
+        y_valid: Validation labels.
+        X_test: Test images.
+        y_test: Test labels.
+        class_names: Mapping from class id to class name.
+        visualize: Whether to generate visualization figures.
+
+    Returns:
+        None.
     """
     # Check if data is loaded
     if X_train is None or y_train is None:

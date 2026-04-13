@@ -2,23 +2,20 @@
 # coding: utf-8
 
 """
-Traffic Sign Classification Training Pipeline
--------------------------------------------------
-Main script for training the traffic sign classification model with ResNet18
+Traffic sign classifier training pipeline.
+
+This script trains, validates, checkpoints, and evaluates a ResNet-18 model
+for traffic sign classification.
 """
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import os
-import time
 import argparse
-
-################################################################################
 import csv
 import re
 import json
-################################################################################
 
 from tqdm import tqdm
 import numpy as np
@@ -27,57 +24,26 @@ import numpy as np
 from network import ResNet18
 from dataset import TrafficSignProcessor, set_seed
 import vis_utils
+import log_utils
 
 
 # Device selection
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-################################################################################
-def append_csv_row(csv_path, fieldnames, row):
-    """Append one row to a CSV file and create header automatically if needed."""
-    file_exists = os.path.exists(csv_path)
-    write_header = (not file_exists) or os.path.getsize(csv_path) == 0
-
-    with open(csv_path, mode='a', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        if write_header:
-            writer.writeheader()
-        writer.writerow(row)
-
-
-def get_next_result_id(results_csv_path):
-    """Return the next integer run id for results CSV files."""
-    if not os.path.exists(results_csv_path) or os.path.getsize(results_csv_path) == 0:
-        return 1
-
-    max_id = 0
-    with open(results_csv_path, mode='r', newline='') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            raw_id = str(row.get('id', '')).strip()
-            match = re.match(r'^(\d+)', raw_id)
-            if match:
-                max_id = max(max_id, int(match.group(1)))
-
-    return max_id + 1
-################################################################################
-
-
 # Training function
 def train(model, train_loader, optimizer, criterion, epoch, epochs):
-    """
-    Train model for one epoch
-    
+    """Train the model for one epoch.
+
     Args:
-        model (nn.Module): Model to train
-        train_loader (DataLoader): Training data loader
-        optimizer (Optimizer): Optimizer
-        criterion: Loss criterion
-        epoch (int): Current epoch
-        epochs (int): Total number of epochs
-        
+        model: Model to train.
+        train_loader: Training DataLoader.
+        optimizer: Optimizer instance.
+        criterion: Loss function.
+        epoch: Current epoch index.
+        epochs: Total number of epochs.
+
     Returns:
-        tuple: Average loss and accuracy for the epoch
+        Tuple containing average loss and accuracy for the epoch.
     """
     model.train()
     train_loss = 0
@@ -107,7 +73,6 @@ def train(model, train_loader, optimizer, criterion, epoch, epochs):
         optimizer.step()
         
         # Statistics
-        # TODO calculate the loss and acc
         loss = loss.item()
         train_loss += loss
         _, predicted = outputs.max(1)
@@ -121,16 +86,15 @@ def train(model, train_loader, optimizer, criterion, epoch, epochs):
 
 # Validation function
 def validate(model, val_loader, criterion):
-    """
-    Validate model on validation set
-    
+    """Evaluate the model on the validation split.
+
     Args:
-        model (nn.Module): Model to validate
-        val_loader (DataLoader): Validation data loader
-        criterion: Loss criterion
-        
+        model: Model to evaluate.
+        val_loader: Validation DataLoader.
+        criterion: Loss function.
+
     Returns:
-        tuple: Average loss and accuracy for validation
+        Tuple containing average validation loss and validation accuracy.
     """
     model.eval()
     val_loss = 0
@@ -153,7 +117,6 @@ def validate(model, val_loader, criterion):
             loss = criterion(outputs, targets)
             
             # Statistics
-            # TODO calculate the loss and acc
             loss = loss.item()
             val_loss += loss
             _, predicted = outputs.max(1)
@@ -168,17 +131,19 @@ def validate(model, val_loader, criterion):
 
 # Save checkpoint
 def save_checkpoint(model, optimizer, scheduler, epoch, acc, history, filepath):
-    """
-    Save model checkpoint
-    
+    """Save model and optimizer state to checkpoint files.
+
     Args:
-        model (nn.Module): Model to save
-        optimizer (Optimizer): Optimizer state
-        scheduler: Learning rate scheduler state
-        epoch (int): Current epoch
-        acc (float): Validation accuracy
-        history (tuple): Training history
-        filepath (str): Path to save the checkpoint
+        model: Model to save.
+        optimizer: Optimizer state source.
+        scheduler: Optional scheduler state source.
+        epoch: Current epoch.
+        acc: Validation accuracy for this checkpoint.
+        history: Training-history tuple.
+        filepath: Path for checkpoint output.
+
+    Returns:
+        None.
     """
     state = {
         'model': model.state_dict(),
@@ -200,8 +165,10 @@ def save_checkpoint(model, optimizer, scheduler, epoch, acc, history, filepath):
 
 # Main function
 def main():
-    """
-    Main function for training the traffic sign classifier
+    """Run end-to-end training, evaluation, and result logging.
+
+    Returns:
+        None.
     """
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Traffic Sign ResNet18 Classification')
@@ -221,7 +188,6 @@ def main():
     parser.add_argument('--augment_train', action='store_true', help='Train with data augmentation')
     args = parser.parse_args()
 
-    ################################################################################
     # Logging setup
     augment_train = args.augment_train
     run_id = f"{args.optimizer.lower()}_lr_{args.lr}_bs_{args.batch_size}_ep_{args.epochs}_{augment_train}_scheduler_{args.scheduler.lower()}_weightdecay_{args.weight_decay}"
@@ -229,7 +195,6 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
 
     legacy_results_path = os.path.join('./results/results.csv')
-    ################################################################################
     
     # Set random seed for reproducibility
     set_seed(42)
@@ -241,10 +206,7 @@ def main():
     val_acc_list = []
     best_acc = 0
     start_epoch = 0  # Important: ensure start_epoch has a default value
-
-    ################################################################################
     best_epoch = -1
-    ################################################################################
     
     # Load data
     processor = TrafficSignProcessor()
@@ -330,11 +292,9 @@ def main():
                 print(f"Resumed from checkpoint Epoch: {start_epoch}, Accuracy: {best_acc:.2f}%")
     
     # Loss function
-    # TODO Define loss function
     criterion = nn.CrossEntropyLoss()
     
     # Set optimizer
-    # TODO set the optimizer
     if args.optimizer.lower() == 'sgd':
         optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     elif args.optimizer.lower() == 'adam':
@@ -387,10 +347,8 @@ def main():
         is_best = val_acc > best_acc
         best_acc = max(val_acc, best_acc)
 
-        ################################################################################
         if is_best:
             best_epoch = epoch + 1
-        ################################################################################
         
         # Save history
         history = (train_loss_list, train_acc_list, val_loss_list, val_acc_list)
@@ -424,9 +382,7 @@ def main():
     # Test
     test_results = vis_utils.plot_confusion_matrix(model, test_loader, processor.class_names, device, criterion, results_dir)
 
-    ################################################################################
     # Write per-run summary log
-    # Build augmentation profile matching dataset.py create_datasets()
     if augment_train:
         augmentation_profile = {
             "enabled": True,
@@ -483,7 +439,7 @@ def main():
     print(f"Hyperparameter log saved to {json_log_path}")
 
     # Keep legacy results.csv format for quick comparisons
-    legacy_id = get_next_result_id(legacy_results_path)
+    legacy_id = log_utils.get_next_result_id(legacy_results_path)
     legacy_row = {
         'id': legacy_id,
         'lr': args.lr,
@@ -493,12 +449,11 @@ def main():
         'augmented': augment_train,
         'val_accuracy': f"{best_acc/100:.4f}"
     }
-    append_csv_row(
+    log_utils.append_csv_row(
         legacy_results_path,
         ['id', 'lr', 'batch_size', 'epochs', 'optimizer', 'augmented', 'val_accuracy'],
         legacy_row
     )
-    ################################################################################
     
     # Visualize results
     vis_utils.visualize_training_results(
