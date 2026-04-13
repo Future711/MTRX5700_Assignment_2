@@ -72,7 +72,7 @@ class ResNet(nn.Module):
 
         Args:
             block:       Residual block class (e.g. BasicBlock).
-            num_blocks:  List of 4 ints — number of blocks in each of the 4 stages.
+            num_blocks:  List of 4 ints - number of blocks in each of the 4 stages.
             num_classes: Number of output classes for the final linear layer.
         """
         super(ResNet, self).__init__()

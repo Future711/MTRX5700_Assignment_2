@@ -104,6 +104,7 @@ class TrafficSignNode(Node):
             qos_profile_sensor_data,
         )
 
+        # Viewer should only be used to demonstrate the functionality of the node at the current stage, and is not required for the core detection pipeline. It can be turned off to save bandwidth if needed.
         self.viewer_pub = self.create_publisher(Image, viewer_topic, qos_profile_sensor_data)
         self.labels_pub = self.create_publisher(String, labels_topic, 10)
         self.distances_pub = self.create_publisher(Float32MultiArray, distances_topic, 10)

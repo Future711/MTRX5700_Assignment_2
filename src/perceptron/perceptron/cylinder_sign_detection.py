@@ -1,4 +1,4 @@
-"""Cone and traffic-sign extraction from camera images.
+"""cylinder and traffic-sign extraction from camera images.
 
 This module detects orange cylinders in a BGR frame and extracts the mounted
 traffic sign crop for downstream classification.
@@ -14,9 +14,9 @@ from PIL import Image
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
 # Minimum number of orange pixels required in a row to count that row when
-# fitting the cone boundary polynomials.
+# fitting the cylinder boundary polynomials.
 MIN_ORANGE_PX = 10
-# Degree of the polynomial used to model the left/right cone edges.
+# Degree of the polynomial used to model the left/right cylinder edges.
 POLY_DEG = 2
 
 
@@ -41,11 +41,11 @@ def threshold_orange(img: np.ndarray) -> np.ndarray:
     mask2 = cv2.inRange(hsv, np.array([160, 100, 50]), np.array([180, 255, 255]))
     return cv2.bitwise_or(mask1, mask2)
 
-def fit_cone_bounds(orange_mask: np.ndarray):
-    """Fit polynomial curves to left and right cone boundaries.
+def fit_cylinder_bounds(orange_mask: np.ndarray):
+    """Fit polynomial curves to left and right cylinder boundaries.
 
     Args:
-        orange_mask: Binary mask containing cone-colored pixels.
+        orange_mask: Binary mask containing cylinder-colored pixels.
 
     Returns:
         Tuple containing:
@@ -68,12 +68,12 @@ def fit_cone_bounds(orange_mask: np.ndarray):
     return left_poly, right_poly
 
 def apply_silhouette(orange_mask: np.ndarray, left_poly, right_poly) -> np.ndarray:
-    """Mask pixels outside the fitted cone silhouette.
+    """Mask pixels outside the fitted cylinder silhouette.
 
     Args:
-        orange_mask: Binary cone color mask.
-        left_poly: Polynomial describing the left cone edge.
-        right_poly: Polynomial describing the right cone edge.
+        orange_mask: Binary cylinder color mask.
+        left_poly: Polynomial describing the left cylinder edge.
+        right_poly: Polynomial describing the right cylinder edge.
 
     Returns:
         Mask where pixels outside the silhouette are set to white.
@@ -91,12 +91,12 @@ def apply_silhouette(orange_mask: np.ndarray, left_poly, right_poly) -> np.ndarr
     return result
 
 def build_silhouette_mask(shape, left_poly, right_poly) -> np.ndarray:
-    """Create a filled binary mask between two cone boundary polynomials.
+    """Create a filled binary mask between two cylinder boundary polynomials.
 
     Args:
         shape: Output mask shape as (height, width).
-        left_poly: Polynomial describing the left cone edge.
-        right_poly: Polynomial describing the right cone edge.
+        left_poly: Polynomial describing the left cylinder edge.
+        right_poly: Polynomial describing the right cylinder edge.
 
     Returns:
         Binary mask filled between left and right boundaries.
@@ -112,7 +112,7 @@ def build_silhouette_mask(shape, left_poly, right_poly) -> np.ndarray:
             mask[r, l:rb + 1] = 255
     return mask
 
-def detect_cones(frame):
+def detect_cylinders(frame):
     """Detect orange traffic cylinders in a BGR camera frame.
 
     Pipeline:
@@ -121,13 +121,13 @@ def detect_cones(frame):
       3. Apply morphological close (fills gaps) then open (removes noise).
       4. Extract contours and filter by minimum area, aspect ratio (must be
          taller than wide), and fill ratio (rejects thin stray edges).
-      5. Iteratively merge boxes that overlap horizontally so that cone
+      5. Iteratively merge boxes that overlap horizontally so that cylinder
          fragments caused by a sign occluding part of the cylinder are
          reunited into a single bounding box.
 
     Returns:
         Tuple containing:
-            boxes: List of (x, y, w, h) cone bounding boxes.
+            boxes: List of (x, y, w, h) cylinder bounding boxes.
             colour_mask: Binary orange mask used for contour extraction.
     """
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -185,22 +185,22 @@ def detect_cones(frame):
 
     return boxes, colour_mask
 
-def detect_sign(cone_crop, orange_mask=None, left_poly=None, right_poly=None):
-    """Isolate and return the traffic sign mounted on a cone crop as a PIL Image.
+def detect_sign(cylinder_crop, orange_mask=None, left_poly=None, right_poly=None):
+    """Isolate and return the traffic sign mounted on a cylinder crop as a PIL Image.
 
     The sign sits *inside* the cylinder silhouette but is not orange itself.
     Strategy:
-      1. Build (or reuse) the orange mask and cone boundary polynomials.
+      1. Build (or reuse) the orange mask and cylinder boundary polynomials.
       2. Apply the silhouette mask to the orange mask, setting pixels outside
-         the cone boundaries to 255 (white/orange).
-      3. Invert so that non-orange regions inside the cone become white blobs.
-      4. Find the largest such blob — that is the sign face.
+         the cylinder boundaries to 255 (white/orange).
+      3. Invert so that non-orange regions inside the cylinder become white blobs.
+      4. Find the largest such blob - that is the sign face.
       5. Crop the sign, centre it in a square black canvas and return a PIL
          Image ready for the classifier (which expects square inputs).
 
     Args:
-        cone_crop: BGR image crop containing one cone.
-        orange_mask: Optional precomputed cone-color mask.
+        cylinder_crop: BGR image crop containing one cylinder.
+        orange_mask: Optional precomputed cylinder-color mask.
         left_poly: Optional precomputed left boundary polynomial.
         right_poly: Optional precomputed right boundary polynomial.
 
@@ -209,22 +209,22 @@ def detect_sign(cone_crop, orange_mask=None, left_poly=None, right_poly=None):
         extraction fails.
     """
     if orange_mask is None:
-        orange_mask = threshold_orange(cone_crop)
+        orange_mask = threshold_orange(cylinder_crop)
 
     if left_poly is None or right_poly is None:
-        left_poly, right_poly = fit_cone_bounds(orange_mask)
+        left_poly, right_poly = fit_cylinder_bounds(orange_mask)
 
     if left_poly is None:
         return None
 
-    # Mask out everything outside the cone shape, then invert to find non-orange regions
+    # Mask out everything outside the cylinder shape, then invert to find non-orange regions
     silhouette = apply_silhouette(orange_mask, left_poly, right_poly)
     inverted = cv2.bitwise_not(silhouette)
     contours, _ = cv2.findContours(inverted, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
         return None
 
-    # The largest non-orange blob inside the cone is assumed to be the sign
+    # The largest non-orange blob inside the cylinder is assumed to be the sign
     largest = max(contours, key=cv2.contourArea)
     x, y, w, h = cv2.boundingRect(largest)
 
@@ -234,7 +234,7 @@ def detect_sign(cone_crop, orange_mask=None, left_poly=None, right_poly=None):
     square = np.zeros((side, side, 3), dtype=np.uint8)
     x_off = (side - w) // 2
     y_off = (side - h) // 2
-    square[y_off:y_off + h, x_off:x_off + w] = cone_crop[y:y + h, x:x + w]
+    square[y_off:y_off + h, x_off:x_off + w] = cylinder_crop[y:y + h, x:x + w]
     square_rgb = cv2.cvtColor(square, cv2.COLOR_BGR2RGB)
     square_pil = Image.fromarray(square_rgb)
     return square_pil
