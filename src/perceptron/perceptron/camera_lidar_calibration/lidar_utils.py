@@ -1,9 +1,18 @@
+"""LiDAR projection and distance-estimation helper functions."""
+
 import open3d as o3d
 import numpy as np
 
 
 def load_pcd_points(pcd_path):
-    """Load a PCD file from disk and return its points as an (N, 3) float array."""
+    """Load points from a PCD file.
+
+    Args:
+        pcd_path: Path to the PCD file.
+
+    Returns:
+        (N, 3) numpy array of point coordinates as floats.
+    """
     pc = o3d.io.read_point_cloud(pcd_path)
     return np.asarray(pc.points, dtype=float)
 
@@ -23,9 +32,10 @@ def project_lidar_points(points_lidar, K, T_cam_lidar, img_shape):
         img_shape:     (H, W[, C]) shape of the target image.
 
     Returns:
-        pixels:    (N, 2) array of (u, v) pixel coordinates (NaN for invalid).
-        depths:    (N,) 2-D Euclidean distance from the LiDAR origin (x-y plane).
-        in_image:  (N,) boolean mask; True where a point projects into the image.
+        Tuple containing:
+            pixels: (N, 2) array of (u, v) pixel coordinates (NaN for invalid).
+            depths: (N,) 2-D Euclidean distance from the LiDAR origin (x-y plane).
+            in_image: (N,) boolean mask; True where a point projects into the image.
     """
     n = points_lidar.shape[0]
     # Homogenise points and transform to camera frame

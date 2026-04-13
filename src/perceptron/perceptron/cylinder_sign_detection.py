@@ -1,3 +1,9 @@
+"""Cone and traffic-sign extraction from camera images.
+
+This module detects orange cylinders in a BGR frame and extracts the mounted
+traffic sign crop for downstream classification.
+"""
+
 import cv2
 import numpy as np
 from PIL import Image
@@ -20,6 +26,12 @@ def threshold_orange(img: np.ndarray) -> np.ndarray:
     Converts the image to HSV, equalises the V channel with CLAHE to handle
     changing lighting, then combines two hue ranges that together cover the
     full orange/red wrap-around in HSV (0-20 and 160-180 degrees).
+
+    Args:
+        img: Input BGR image.
+
+    Returns:
+        Binary mask where orange pixels are non-zero.
     """
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     h, s, v = cv2.split(hsv)
@@ -30,7 +42,16 @@ def threshold_orange(img: np.ndarray) -> np.ndarray:
     return cv2.bitwise_or(mask1, mask2)
 
 def fit_cone_bounds(orange_mask: np.ndarray):
-    """Fit polynomials to left/right cone edges. Returns (left_poly, right_poly) or (None, None)."""
+    """Fit polynomial curves to left and right cone boundaries.
+
+    Args:
+        orange_mask: Binary mask containing cone-colored pixels.
+
+    Returns:
+        Tuple containing:
+            left_poly: numpy.poly1d for the left boundary, or None.
+            right_poly: numpy.poly1d for the right boundary, or None.
+    """
     H, _ = orange_mask.shape
     rows, left_x, right_x = [], [], []
     for r in range(H):
@@ -47,7 +68,16 @@ def fit_cone_bounds(orange_mask: np.ndarray):
     return left_poly, right_poly
 
 def apply_silhouette(orange_mask: np.ndarray, left_poly, right_poly) -> np.ndarray:
-    """White out everything outside the fitted cone silhouette in the orange mask."""
+    """Mask pixels outside the fitted cone silhouette.
+
+    Args:
+        orange_mask: Binary cone color mask.
+        left_poly: Polynomial describing the left cone edge.
+        right_poly: Polynomial describing the right cone edge.
+
+    Returns:
+        Mask where pixels outside the silhouette are set to white.
+    """
     H, W = orange_mask.shape
     result = orange_mask.copy()
     all_rows = np.arange(H)
@@ -61,7 +91,16 @@ def apply_silhouette(orange_mask: np.ndarray, left_poly, right_poly) -> np.ndarr
     return result
 
 def build_silhouette_mask(shape, left_poly, right_poly) -> np.ndarray:
-    """Filled mask between the two polynomial cone edges."""
+    """Create a filled binary mask between two cone boundary polynomials.
+
+    Args:
+        shape: Output mask shape as (height, width).
+        left_poly: Polynomial describing the left cone edge.
+        right_poly: Polynomial describing the right cone edge.
+
+    Returns:
+        Binary mask filled between left and right boundaries.
+    """
     H, W = shape
     mask = np.zeros((H, W), dtype=np.uint8)
     all_rows = np.arange(H)
@@ -87,8 +126,9 @@ def detect_cones(frame):
          reunited into a single bounding box.
 
     Returns:
-        boxes      -- list of (x, y, w, h) bounding rectangles for each cone.
-        colour_mask -- the binary orange colour mask used for detection.
+        Tuple containing:
+            boxes: List of (x, y, w, h) cone bounding boxes.
+            colour_mask: Binary orange mask used for contour extraction.
     """
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     h, s, v = cv2.split(hsv)
@@ -158,7 +198,15 @@ def detect_sign(cone_crop, orange_mask=None, left_poly=None, right_poly=None):
       5. Crop the sign, centre it in a square black canvas and return a PIL
          Image ready for the classifier (which expects square inputs).
 
-    Returns None if the cone boundary cannot be fitted or no blob is found.
+    Args:
+        cone_crop: BGR image crop containing one cone.
+        orange_mask: Optional precomputed cone-color mask.
+        left_poly: Optional precomputed left boundary polynomial.
+        right_poly: Optional precomputed right boundary polynomial.
+
+    Returns:
+        PIL image containing the extracted square sign crop, or None if sign
+        extraction fails.
     """
     if orange_mask is None:
         orange_mask = threshold_orange(cone_crop)

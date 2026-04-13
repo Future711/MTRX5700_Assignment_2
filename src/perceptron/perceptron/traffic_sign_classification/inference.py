@@ -1,3 +1,5 @@
+"""Inference utilities for traffic sign classification models."""
+
 import torch
 import os
 import cv2

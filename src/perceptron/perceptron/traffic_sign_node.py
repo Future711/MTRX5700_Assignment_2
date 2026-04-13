@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""ROS 2 node for cone detection, sign classification, and distance estimation."""
 
 import json
 import os
@@ -42,6 +43,7 @@ class TrafficSignNode(Node):
     """
 
     def __init__(self):
+        """Initialise subscribers, publishers, model, and calibration resources."""
         super().__init__("traffic_sign_node")
 
         this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -82,6 +84,7 @@ class TrafficSignNode(Node):
         self.latest_points = np.empty((0, 3), dtype=float)
         self.latest_cloud_stamp_ns = None
 
+        # Raw image only for recorded bags. For live camera feed, use compressed image topic to save bandwidth.
         # self.image_sub = self.create_subscription(
         #     Image,
         #     image_topic,
@@ -111,7 +114,14 @@ class TrafficSignNode(Node):
         )
 
     def _stamp_to_ns(self, stamp) -> int:
-        """Convert a ROS header stamp to a single integer nanosecond timestamp."""
+        """Convert a ROS header stamp to nanoseconds.
+
+        Args:
+            stamp: ROS time stamp object with sec and nanosec fields.
+
+        Returns:
+            Integer timestamp in nanoseconds.
+        """
         return int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec)
 
     def pointcloud_callback(self, msg: PointCloud):
@@ -121,6 +131,12 @@ class TrafficSignNode(Node):
         latest available scan without needing to synchronise the two topics.
         The cloud timestamp is saved separately so detection records can report
         how fresh the LiDAR data was relative to the image.
+
+        Args:
+            msg: Incoming PointCloud message.
+
+        Returns:
+            None.
         """
         if not msg.points:
             self.latest_points = np.empty((0, 3), dtype=float)
@@ -138,12 +154,26 @@ class TrafficSignNode(Node):
             self.latest_cloud_stamp_ns = None
 
     def image_callback(self, msg: Image):
-        """Decode a raw ROS Image message and forward it for processing."""
+        """Decode a raw ROS Image message and process it.
+
+        Args:
+            msg: Incoming raw image message.
+
+        Returns:
+            None.
+        """
         frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         self._process_frame(msg.header, frame)
 
     def compressed_image_callback(self, msg: CompressedImage):
-        """Decode a JPEG/PNG CompressedImage message and forward it for processing."""
+        """Decode a CompressedImage message and process it.
+
+        Args:
+            msg: Incoming compressed image message.
+
+        Returns:
+            None.
+        """
         frame = cv2.imdecode(np.frombuffer(msg.data, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             self.get_logger().warning("Failed to decode CompressedImage frame")
@@ -164,6 +194,13 @@ class TrafficSignNode(Node):
 
         Publishes the annotated image, sign labels, distances, and full
         detection records (including timestamps for both sensors).
+
+        Args:
+            header: ROS message header for the image frame.
+            frame: BGR image array.
+
+        Returns:
+            None.
         """
         points_lidar = self.latest_points.copy()
 
@@ -244,7 +281,14 @@ class TrafficSignNode(Node):
 
 
 def main(args=None):
-    """Entry point: initialise ROS 2, spin the node, and clean up on exit."""
+    """Run the traffic sign node process.
+
+    Args:
+        args: Optional ROS argument list.
+
+    Returns:
+        None.
+    """
     rclpy.init(args=args)
     node = TrafficSignNode()
     try:

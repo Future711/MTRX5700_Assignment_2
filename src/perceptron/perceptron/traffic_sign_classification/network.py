@@ -2,9 +2,7 @@
 # coding: utf-8
 
 """
-Neural Network Architecture for Traffic Sign Classification
--------------------------------------------------
-ResNet18 model implementation for traffic sign classification
+ResNet architectures for traffic sign classification.
 """
 
 import torch
@@ -125,13 +123,12 @@ class ResNet(nn.Module):
 
 
 def ResNet18(num_classes=5):
-    """
-    Creates a ResNet18 model with specified number of output classes
-    
+    """Create a ResNet-18 model instance.
+
     Args:
-        num_classes (int): Number of output classes
-        
+        num_classes: Number of output classes.
+
     Returns:
-        ResNet: ResNet18 model
+        ResNet-18 model.
     """
     return ResNet(BasicBlock, [2, 2, 2, 2], num_classes)
