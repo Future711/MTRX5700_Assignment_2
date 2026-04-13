@@ -117,6 +117,51 @@ def detect_sign(cone_crop):
     return square
 
 
+def build_side_panel(crops, thumb_w=160):
+    """Build a vertical strip with cone crop and sign crop side by side per cone."""
+    items = []
+    for i, (cone_crop, sign) in enumerate(crops):
+        # Scale cone crop to thumb_w wide
+        ch, cw = cone_crop.shape[:2]
+        cone_h = max(1, int(ch * thumb_w / cw))
+        cone_thumb = cv2.resize(cone_crop, (thumb_w, cone_h))
+
+        if sign is not None:
+            sh, sw = sign.shape[:2]
+            sign_h = max(1, int(sh * thumb_w / sw))
+            sign_thumb = cv2.resize(sign, (thumb_w, sign_h))
+        else:
+            sign_thumb = np.zeros((cone_h, thumb_w, 3), dtype=np.uint8)
+            cv2.putText(sign_thumb, "no sign", (4, cone_h // 2),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 100, 100), 1)
+
+        # Pad shorter one to match height
+        row_h = max(cone_thumb.shape[0], sign_thumb.shape[0])
+        def pad_h(img, h):
+            diff = h - img.shape[0]
+            return np.vstack([img, np.zeros((diff, img.shape[1], 3), dtype=np.uint8)]) if diff > 0 else img
+        cone_thumb = pad_h(cone_thumb, row_h)
+        sign_thumb  = pad_h(sign_thumb,  row_h)
+
+        # Label bar above the pair
+        pair_w = thumb_w * 2 + 4  # 4px gap
+        label_bar = np.zeros((20, pair_w, 3), dtype=np.uint8)
+        cv2.putText(label_bar, f"Cone {i}", (2, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (180, 180, 180), 1)
+        cv2.putText(label_bar, "Sign", (thumb_w + 6, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (180, 180, 180), 1)
+
+        gap = np.full((row_h, 4, 3), 40, dtype=np.uint8)
+        pair_row = np.hstack([cone_thumb, gap, sign_thumb])
+
+        items.append(label_bar)
+        items.append(pair_row)
+        items.append(np.full((6, pair_w, 3), 40, dtype=np.uint8))  # divider
+
+    if not items:
+        return np.zeros((1, thumb_w * 2 + 4, 3), dtype=np.uint8)
+
+    return np.vstack(items)
+
+
 def build_silhouette_mask(shape, left_poly, right_poly) -> np.ndarray:
     """Filled mask between the two polynomial cone edges."""
     H, W = shape
@@ -279,6 +324,7 @@ while 0 <= idx < len(pairs):
 
     annotated = frame.copy()
     frame_rows = []
+    cone_crops_display = []   # (cone_crop, sign_img_or_None)
 
     for cone_idx, (x, y, w, h) in enumerate(boxes):
         cone_crop = frame[y:y+h, x:x+w]
@@ -303,6 +349,7 @@ while 0 <= idx < len(pairs):
         )
 
         sign = detect_sign(cone_crop)
+        cone_crops_display.append((cone_crop.copy(), sign.copy() if sign is not None else None))
         sign_label = None
         if sign is not None:
             sign_name = f"{os.path.splitext(img_name)[0]}_cone{cone_idx}_sign.png"
@@ -358,7 +405,15 @@ while 0 <= idx < len(pairs):
     cv2.putText(annotated, info1, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
     cv2.putText(annotated, info2, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (255, 255, 255), 2)
 
-    cv2.imshow("Task 3 Viewer", annotated)
+    side_panel = build_side_panel(cone_crops_display)
+    h_main, h_side = annotated.shape[0], side_panel.shape[0]
+    max_h = max(h_main, h_side)
+    if h_main < max_h:
+        annotated = np.vstack([annotated, np.zeros((max_h - h_main, annotated.shape[1], 3), dtype=np.uint8)])
+    if h_side < max_h:
+        side_panel = np.vstack([side_panel, np.zeros((max_h - h_side, side_panel.shape[1], 3), dtype=np.uint8)])
+    display = np.hstack([annotated, side_panel])
+    cv2.imshow("Task 3 Viewer", display)
     key = cv2.waitKey(0) & 0xFF
 
     # q or Esc -> quit
@@ -380,5 +435,17 @@ with open(OUTPUT_CSV, "w", newline="") as f:
     writer.writeheader()
     writer.writerows(csv_rows)
 
+single_cone_frames = len(set(r["image"] for r in csv_rows if
+                            sum(1 for rr in csv_rows if rr["image"] == r["image"]) == 1))
+
+from collections import Counter
+sign_counts = Counter(r["sign"] for r in csv_rows if r["sign"])
+
 print(f"\nDone. Annotated images → {OUTPUT_DIR}")
 print(f"CSV → {OUTPUT_CSV}")
+print(f"Frames with exactly one cone detected: {single_cone_frames}")
+print("\nSign detections:")
+for sign_name, count in sorted(sign_counts.items()):
+    print(f"  {sign_name}: {count}")
+if not sign_counts:
+    print("  (none)")
