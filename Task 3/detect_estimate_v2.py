@@ -10,10 +10,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "Vision Task"))
 from inference import inference, CLASS_NAMES
 
 # directory of lidar filtered images (dinhs one with every third image)
-IMAGE_DIR  = "lidar_matched_images_2/"
+IMAGE_DIR  = "lidar_matched_multiple_3/"
 
 # Directory to the point cloud files
-PCD_DIR    = "pointcloud_left_2/"
+PCD_DIR    = "pointcloud_multi_3/"
 
 CALIB_FILE = "calibration.json"
 OUTPUT_DIR   = "output_distances/"
@@ -92,21 +92,40 @@ def apply_silhouette(orange_mask: np.ndarray, left_poly, right_poly) -> np.ndarr
 
 def detect_sign(cone_crop):
     """Find the sign on a cone crop using v2 polynomial silhouette method.
-    Finds the largest non-orange region inside the cone outline. Returns the sign crop or None."""
+    Returns (sign_crop, cone_mask_debug, sign_mask_debug).
+    cone_mask_debug: orange binary mask with fitted polynomials.
+    sign_mask_debug: inverted silhouette (non-orange inside cone) with bounding rect of detected sign.
+    sign_crop is None if no sign found."""
+    H, W = cone_crop.shape[:2]
     orange_mask = threshold_orange(cone_crop)
     left_poly, right_poly = fit_cone_bounds(orange_mask)
+
+    # Cone mask debug: orange binary mask + polynomials
+    cone_mask_debug = cv2.cvtColor(orange_mask, cv2.COLOR_GRAY2BGR)
+    if left_poly is not None:
+        rows = np.arange(H)
+        left_pts  = np.column_stack([np.clip(left_poly(rows).astype(int),  0, W-1), rows])
+        right_pts = np.column_stack([np.clip(right_poly(rows).astype(int), 0, W-1), rows])
+        cv2.polylines(cone_mask_debug, [left_pts],  False, (0, 255, 0), 1)
+        cv2.polylines(cone_mask_debug, [right_pts], False, (0, 255, 0), 1)
+
     if left_poly is None:
-        return None
+        return None, cone_mask_debug, np.zeros((H, W, 3), dtype=np.uint8)
 
     silhouette = apply_silhouette(orange_mask, left_poly, right_poly)
     # Invert: non-orange regions inside the cone become white
     inverted = cv2.bitwise_not(silhouette)
     contours, _ = cv2.findContours(inverted, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Sign mask debug: inverted silhouette with bounding rect drawn
+    sign_mask_debug = cv2.cvtColor(inverted, cv2.COLOR_GRAY2BGR)
+
     if not contours:
-        return None
+        return None, cone_mask_debug, sign_mask_debug
 
     largest = max(contours, key=cv2.contourArea)
     x, y, w, h = cv2.boundingRect(largest)
+    cv2.rectangle(sign_mask_debug, (x, y), (x + w, y + h), (0, 255, 255), 1)
 
     # Pad to square with white
     side = max(w, h)
@@ -114,50 +133,56 @@ def detect_sign(cone_crop):
     x_off = (side - w) // 2
     y_off = (side - h) // 2
     square[y_off:y_off+h, x_off:x_off+w] = cone_crop[y:y+h, x:x+w]
-    return square
+    return square, cone_mask_debug, sign_mask_debug
 
 
-def build_side_panel(crops, thumb_w=160):
-    """Build a vertical strip with cone crop and sign crop side by side per cone."""
+def build_side_panel(crops, thumb_w=140):
+    """Build a vertical strip: cone | cone mask+poly | sign mask+rect | sign crop."""
+    GAP = 4
+    NUM_COLS = 4
+    panel_w = thumb_w * NUM_COLS + GAP * (NUM_COLS - 1)
     items = []
-    for i, (cone_crop, sign) in enumerate(crops):
-        # Scale cone crop to thumb_w wide
-        ch, cw = cone_crop.shape[:2]
-        cone_h = max(1, int(ch * thumb_w / cw))
-        cone_thumb = cv2.resize(cone_crop, (thumb_w, cone_h))
+
+    def scale_to_w(img, w):
+        h, iw = img.shape[:2]
+        return cv2.resize(img, (w, max(1, int(h * w / iw))))
+
+    def pad_h(img, h):
+        diff = h - img.shape[0]
+        return np.vstack([img, np.zeros((diff, img.shape[1], 3), dtype=np.uint8)]) if diff > 0 else img
+
+    for i, (cone_crop, sign, cone_mask_debug, sign_mask_debug) in enumerate(crops):
+        cone_thumb      = scale_to_w(cone_crop,       thumb_w)
+        cone_mask_thumb = scale_to_w(cone_mask_debug, thumb_w)
+        sign_mask_thumb = scale_to_w(sign_mask_debug, thumb_w)
 
         if sign is not None:
-            sh, sw = sign.shape[:2]
-            sign_h = max(1, int(sh * thumb_w / sw))
-            sign_thumb = cv2.resize(sign, (thumb_w, sign_h))
+            sign_thumb = scale_to_w(sign, thumb_w)
         else:
-            sign_thumb = np.zeros((cone_h, thumb_w, 3), dtype=np.uint8)
-            cv2.putText(sign_thumb, "no sign", (4, cone_h // 2),
+            sign_thumb = np.zeros((cone_thumb.shape[0], thumb_w, 3), dtype=np.uint8)
+            cv2.putText(sign_thumb, "no sign", (4, max(12, cone_thumb.shape[0] // 2)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 100, 100), 1)
 
-        # Pad shorter one to match height
-        row_h = max(cone_thumb.shape[0], sign_thumb.shape[0])
-        def pad_h(img, h):
-            diff = h - img.shape[0]
-            return np.vstack([img, np.zeros((diff, img.shape[1], 3), dtype=np.uint8)]) if diff > 0 else img
-        cone_thumb = pad_h(cone_thumb, row_h)
-        sign_thumb  = pad_h(sign_thumb,  row_h)
+        row_h = max(cone_thumb.shape[0], cone_mask_thumb.shape[0], sign_mask_thumb.shape[0], sign_thumb.shape[0])
+        cone_thumb      = pad_h(cone_thumb,      row_h)
+        cone_mask_thumb = pad_h(cone_mask_thumb, row_h)
+        sign_mask_thumb = pad_h(sign_mask_thumb, row_h)
+        sign_thumb      = pad_h(sign_thumb,      row_h)
 
-        # Label bar above the pair
-        pair_w = thumb_w * 2 + 4  # 4px gap
-        label_bar = np.zeros((20, pair_w, 3), dtype=np.uint8)
-        cv2.putText(label_bar, f"Cone {i}", (2, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (180, 180, 180), 1)
-        cv2.putText(label_bar, "Sign", (thumb_w + 6, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (180, 180, 180), 1)
+        label_bar = np.zeros((20, panel_w, 3), dtype=np.uint8)
+        for col_i, text in enumerate([f"Cone {i}", "Cone mask", "Sign mask", "Sign"]):
+            cv2.putText(label_bar, text, (col_i * (thumb_w + GAP) + 2, 14),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
 
-        gap = np.full((row_h, 4, 3), 40, dtype=np.uint8)
-        pair_row = np.hstack([cone_thumb, gap, sign_thumb])
+        g = np.full((row_h, GAP, 3), 40, dtype=np.uint8)
+        row = np.hstack([cone_thumb, g, cone_mask_thumb, g, sign_mask_thumb, g, sign_thumb])
 
         items.append(label_bar)
-        items.append(pair_row)
-        items.append(np.full((6, pair_w, 3), 40, dtype=np.uint8))  # divider
+        items.append(row)
+        items.append(np.full((6, panel_w, 3), 40, dtype=np.uint8))
 
     if not items:
-        return np.zeros((1, thumb_w * 2 + 4, 3), dtype=np.uint8)
+        return np.zeros((1, panel_w, 3), dtype=np.uint8)
 
     return np.vstack(items)
 
@@ -348,8 +373,8 @@ while 0 <= idx < len(pairs):
             cv2.FONT_HERSHEY_SIMPLEX, 0.60, (0, 255, 0), 2
         )
 
-        sign = detect_sign(cone_crop)
-        cone_crops_display.append((cone_crop.copy(), sign.copy() if sign is not None else None))
+        sign, cone_mask_debug, sign_mask_debug = detect_sign(cone_crop)
+        cone_crops_display.append((cone_crop.copy(), sign.copy() if sign is not None else None, cone_mask_debug, sign_mask_debug))
         sign_label = None
         if sign is not None:
             sign_name = f"{os.path.splitext(img_name)[0]}_cone{cone_idx}_sign.png"
@@ -435,15 +460,20 @@ with open(OUTPUT_CSV, "w", newline="") as f:
     writer.writeheader()
     writer.writerows(csv_rows)
 
-single_cone_frames = len(set(r["image"] for r in csv_rows if
-                            sum(1 for rr in csv_rows if rr["image"] == r["image"]) == 1))
-
 from collections import Counter
+
+# Count cones per frame (include frames with 0 detections)
+cones_per_frame = Counter(r["image"] for r in csv_rows)
+all_images = [name for name, _ in pairs]
+cone_count_dist = Counter(cones_per_frame.get(img, 0) for img in all_images)
+
 sign_counts = Counter(r["sign"] for r in csv_rows if r["sign"])
 
 print(f"\nDone. Annotated images → {OUTPUT_DIR}")
 print(f"CSV → {OUTPUT_CSV}")
-print(f"Frames with exactly one cone detected: {single_cone_frames}")
+print("\nCones detected per frame:")
+for n in sorted(cone_count_dist):
+    print(f"  {n} cone{'s' if n != 1 else ''}: {cone_count_dist[n]} frame{'s' if cone_count_dist[n] != 1 else ''}")
 print("\nSign detections:")
 for sign_name, count in sorted(sign_counts.items()):
     print(f"  {sign_name}: {count}")
