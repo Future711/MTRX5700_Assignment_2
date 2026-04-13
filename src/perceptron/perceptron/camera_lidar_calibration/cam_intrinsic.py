@@ -1,3 +1,9 @@
+"""Estimate camera intrinsic parameters from checkerboard images.
+
+Run this script with a folder containing checkerboard images. It detects chess
+corners, calibrates the camera, and stores the intrinsics and reprojection
+error in a JSON file.
+"""
 
 import os
 import argparse
@@ -5,14 +11,15 @@ import json
 import numpy as np
 import cv2
 
-"""Perform intrinsic calibration: 
-in terminal run: 
-python3 cam_intrinsic.py ./calibration_output/images
-
-
-"""
-
 def load_images_from_folder(folder):
+    """Load all readable images from a folder.
+
+    Args:
+        folder: Directory containing image files.
+
+    Returns:
+        List of images loaded with OpenCV in BGR format.
+    """
     images = []
     for filename in os.listdir(folder):
         print(os.path.join(folder,filename))
@@ -23,6 +30,11 @@ def load_images_from_folder(folder):
 
 
 def main():
+    """Run camera intrinsic calibration and write the result to JSON.
+
+    Returns:
+        None.
+    """
     parser = argparse.ArgumentParser(description="Calibrate image intrinsics from a collection of checkerboard images.")
     parser.add_argument("image_dir", help="Image directory.")
     parser.add_argument("--output", default="calibration_example.json", help="Output JSON file (default: calibration_example.json).")
@@ -30,13 +42,11 @@ def main():
 
     image_dir = args.image_dir
 
-    # termination criteria
+    # Termination criteria
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-    # Object Points (objp) refers to the known points on an object, in this case a checkerboard
-    # The known points are the checkerboard vertices (inside, excluding the out most corners)
-    # Depending on your checkerboard layout, the parameters below willc change
-    # TODO: Update the checkerboard parameters based on your own printed out board
+    # Object points describe the known checkerboard vertex locations in 3D.
+    # Update these parameters to match the physical board being used.
     checkerboard_width = 8
     checkerboard_height = 11
     checkerboard_size = 0.0185
@@ -67,14 +77,14 @@ def main():
 
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
 
-    #Now re-project images to pixels for re-projection error 
-    #use cv2.projectPoints:
+    # Now re-project images to pixels for re-projection error 
+    # use cv2.projectPoints:
     # use computed rvecs, tvecs, mtx, and dist 
     # to reproject known 3D points back into each image, then compute distance (norm) between reprojected points and originally detected imgpoints. Average across all images
     total_error = 0
     for i in range(len(objpoints)):
         imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecs[i], tvecs[i], mtx, dist)
-        error = cv2.norm(imgpoints[i], imgpoints2, cv2.NORM_L2) / len(imgpoints2) #norming is calculating the Euclidean distance 
+        error = cv2.norm(imgpoints[i], imgpoints2, cv2.NORM_L2) / len(imgpoints2) # norming is calculating the Euclidean distance 
         total_error += error
     mean_error = total_error / len(objpoints)
     

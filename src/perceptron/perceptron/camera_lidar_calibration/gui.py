@@ -1,26 +1,37 @@
 
+"""Interactive GUI helpers for selecting calibration points.
+
+This module provides Tk-based interfaces used during manual camera-LiDAR
+extrinsic calibration.
+"""
+
 import cv2
 
 import numpy as np
 
 import tkinter as tk
 from tkinter import ttk
-from pathlib import Path
-
-import numpy as np
 from numpy import linalg as la
-from scipy.spatial.transform import Rotation
 
 import matplotlib.pyplot as plt
-import matplotlib.backends.backend_tkagg as tkagg 
+import matplotlib.backends.backend_tkagg as tkagg
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from mpl_toolkits.mplot3d import Axes3D
-from sklearn import linear_model
+
 
 
 class SelectPointsInterface:
-  # Class used to create an interactive GUI for selecting LIDAR points corresponding to the checkerboard
+  """Interactive GUI for selecting LiDAR points in the current view."""
+
   def __init__(self, laser, laser_points):
+    """Initialize the LiDAR point-selection interface.
+
+    Args:
+        laser: LiDAR scan points as a NumPy array.
+        laser_points: List that accumulates selected point groups.
+
+    Returns:
+        None.
+    """
     self.root = tk.Tk()
     self.root.title("Camera 2D LiDAR Calibration Menu - LiDAR 2D Point Selection")
     self.root.geometry("700x700")
@@ -57,6 +68,11 @@ class SelectPointsInterface:
     self.reset_and_add_2d_lidar_points()
 
   def reset_and_add_2d_lidar_points(self):
+    """Reset the plot and redraw all LiDAR points.
+
+    Returns:
+        None.
+    """
     if self.ax_lidar_points:
       self.ax_lidar_points.remove()
     self.ax_lidar_points = None
@@ -75,6 +91,14 @@ class SelectPointsInterface:
     self.figure.canvas.flush_events()
 
   def select_points(self, event):
+    """Select LiDAR points inside the current zoom bounds.
+
+    Args:
+      event: Matplotlib button press event.
+
+    Returns:
+      None.
+    """
     if self.ax_selected_lidar_points:
       self.ax_selected_lidar_points.remove()
     self.ax_selected_lidar_points = None
@@ -94,12 +118,33 @@ class SelectPointsInterface:
     self.figure.canvas.flush_events()
   
   def on_xlims_change(self, event_ax):
+    """Update the stored x-axis limits.
+
+    Args:
+        event_ax: Matplotlib axis instance.
+
+    Returns:
+        None.
+    """
     self.xlims = event_ax.get_xlim()
 
   def on_ylims_change(self, event_ax):
+    """Update the stored y-axis limits.
+
+    Args:
+        event_ax: Matplotlib axis instance.
+
+    Returns:
+        None.
+    """
     self.ylims = event_ax.get_ylim()
 
   def add_figure(self):
+    """Create the Matplotlib figure used by the interface.
+
+    Returns:
+        None.
+    """
     self.figure = plt.Figure(figsize=(7, 5), dpi=100)
     self.ax = self.figure.add_subplot(111)
     self.chart_type = FigureCanvasTkAgg(self.figure, self.root)
@@ -118,6 +163,14 @@ class SelectPointsInterface:
     pass
 
   def done_callback(self, event):
+    """Confirm the selection and close the window.
+
+    Args:
+        event: Matplotlib button press event.
+
+    Returns:
+        None.
+    """
     if self.selected_points_indices:
       # Extract the selected points and insert them into the output list
       selected_pc2_points = self.laser_2d[self.selected_points_indices]
@@ -126,15 +179,30 @@ class SelectPointsInterface:
       self.root.after(0, self.root.destroy)
 
   def run(self) -> np.ndarray:
+    """Run the GUI and return the selected point groups.
+
+    Returns:
+        List of selected 2D LiDAR point arrays.
+    """
     self.app.mainloop()
     assert self.confirmed, "Error: You must select 2D LiDAR points to proceed."
     return self.laser_points
     
 class ImageVisInterface:
-  # Class for an interface to visualise images and checkerboard
-  # Also where we estimate the line in the camera frame corresponding to the checkerboard using its pose
+  """Interactive GUI for verifying checkerboard pose and extracting points."""
+
   def __init__(self, rotation_rod, translation, camera_image, camera_points):
-    # GUI
+    """Initialize the camera verification interface.
+
+    Args:
+        rotation_rod: Checkerboard rotation vector in Rodrigues form.
+        translation: Checkerboard translation vector.
+        camera_image: Camera image used for verification.
+        camera_points: List that accumulates extracted camera points.
+
+    Returns:
+        None.
+    """
     self.root = tk.Tk()
     self.root.title("Camera 2D LiDAR Calibration - Camera View")
     self.root.geometry("700x700")
@@ -167,11 +235,16 @@ class ImageVisInterface:
     self.verified = False
     self.extracted = False
 
-    img = cv2.cvtColor(camera_image, cv2.COLOR_RGB2BGR) # changes image encoding from RGB to BGR for cv2.imwrite to work correctly
+    img = cv2.cvtColor(camera_image, cv2.COLOR_RGB2BGR)
     self.ax.imshow(img)
 
 
   def add_figure(self) -> None:
+    """Create the Matplotlib figure used by the interface.
+
+    Returns:
+        None.
+    """
     self.figure = plt.Figure(figsize=(7, 5), dpi=100)
     self.ax = self.figure.add_subplot(111)
     self.chart_type = FigureCanvasTkAgg(self.figure, self.root)
@@ -180,16 +253,39 @@ class ImageVisInterface:
     self.chart_type.get_tk_widget().pack()
 
   def on_xlims_change(self, event_ax) -> None:
+    """Update the stored x-axis limits.
+
+    Args:
+      event_ax: Matplotlib axis instance.
+
+    Returns:
+      None.
+    """
     self.xlims = event_ax.get_xlim()
 
   def on_ylims_change(self, event_ax) -> None:
+    """Update the stored y-axis limits.
+
+    Args:
+      event_ax: Matplotlib axis instance.
+
+    Returns:
+      None.
+    """
     self.ylims = event_ax.get_ylim()
 
   def done_callback(self, event) -> None:
-    # OpenCV and robotic frame convention conversion - VERY IMPORTANT and common
-    rot_rod_zn90 = np.array([[0], [0], [-np.pi/2]]) # rotation around z axis for -90 degrees, in Rodrigues form
-    rot_zn90, _ = cv2.Rodrigues(rot_rod_zn90) # in matrix form
-    rot_rod_xn90 = np.array([[-np.pi/2], [0], [0]]) # rotation around x axis for -90 degrees, in Rodrigues form
+    """Confirm the image and extract camera-frame line points.
+
+    Args:
+      event: Matplotlib button press event.
+
+    Returns:
+      None.
+    """
+    rot_rod_zn90 = np.array([[0], [0], [-np.pi/2]])
+    rot_zn90, _ = cv2.Rodrigues(rot_rod_zn90)
+    rot_rod_xn90 = np.array([[-np.pi/2], [0], [0]])
     rot_xn90, _ = cv2.Rodrigues(rot_rod_xn90)
     rot_cam_to_robot = rot_zn90 @ rot_xn90 # the rotation that transforms a point in the cv convention to that in the robot convention
     tf_cam_to_robot = np.eye(4)
@@ -225,7 +321,6 @@ class ImageVisInterface:
     line_base = np.linspace(line_start, line_end, int((line_end - line_start)/line_spacing)+1)
     line_points = board_origin.T + np.outer(line_base, board_y_direction)
     line_points_2d = line_points[:, :2]
-    # Write this line to an output list
     self.camera_points.append(line_points_2d)
 
     self.verified = True
@@ -233,12 +328,25 @@ class ImageVisInterface:
     self.root.after(0, self.root.destroy)
 
   def cancel_callback(self, event) -> None:
+    """Reject the current image and close the window.
+
+    Args:
+        event: Matplotlib button press event.
+
+    Returns:
+        None.
+    """
     self.verified = True
     self.extracted = False
     self.root.after(0, self.root.destroy)
 
 
   def run(self) -> tuple[bool, np.ndarray]:
+    """Run the GUI and return the extraction result.
+
+    Returns:
+        Tuple of (extracted, camera_points).
+    """
     self.app.mainloop()
     assert self.verified, "Error: You must verify the quality of the image."
     return self.extracted, self.camera_points

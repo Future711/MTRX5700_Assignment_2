@@ -1,3 +1,5 @@
+"""Two-dimensional ICP helpers for camera-LiDAR calibration."""
+
 import math
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
@@ -5,11 +7,14 @@ from sklearn.neighbors import NearestNeighbors
 # Original source: https://github.com/richardos/icp
 
 def euclidean_distance(point1, point2):
-    """
-    Euclidean distance between two points.
-    :param point1: the first point as a tuple (a_1, a_2, ..., a_n)
-    :param point2: the second point as a tuple (b_1, b_2, ..., b_n)
-    :return: the Euclidean distance
+    """Compute Euclidean distance between two points.
+
+    Args:
+        point1: First point sequence.
+        point2: Second point sequence.
+
+    Returns:
+        Euclidean distance between the points.
     """
     a = np.array(point1)
     b = np.array(point2)
@@ -18,12 +23,17 @@ def euclidean_distance(point1, point2):
 
 
 def point_based_matching(point_pairs):
-    """
-    This function is based on the paper "Robot Pose Estimation in Unknown Environments by Matching 2D Range Scans"
-    by F. Lu and E. Milios.
+    """Estimate 2D rigid motion from matched point pairs.
 
-    :param point_pairs: the matched point pairs [((x1, y1), (x1', y1')), ..., ((xi, yi), (xi', yi')), ...]
-    :return: the rotation angle and the 2D translation (x, y) to be applied for matching the given pairs of points
+    This implementation follows the approach from "Robot Pose Estimation in
+    Unknown Environments by Matching 2D Range Scans" by F. Lu and E. Milios.
+
+    Args:
+        point_pairs: Matched point pairs as [((x, y), (x', y')), ...].
+
+    Returns:
+        Tuple of (rotation_angle, translation_x, translation_y), or
+        (None, None, None) when no pairs are available.
     """
 
     x_mean = 0
@@ -71,22 +81,20 @@ def point_based_matching(point_pairs):
 
 def icp(reference_points, points, max_iterations=100, distance_threshold=0.3, convergence_translation_threshold=1e-3,
         convergence_rotation_threshold=1e-4, point_pairs_threshold=10, verbose=False):
-    """
-    An implementation of the Iterative Closest Point algorithm that matches a set of M 2D points to another set
-    of N 2D (reference) points.
+    """Align one 2D point set to another using Iterative Closest Point.
 
-    :param reference_points: the reference point set as a numpy array (N x 2)
-    :param points: the point that should be aligned to the reference_points set as a numpy array (M x 2)
-    :param max_iterations: the maximum number of iteration to be executed
-    :param distance_threshold: the distance threshold between two points in order to be considered as a pair
-    :param convergence_translation_threshold: the threshold for the translation parameters (x and y) for the
-                                              transformation to be considered converged
-    :param convergence_rotation_threshold: the threshold for the rotation angle (in rad) for the transformation
-                                               to be considered converged
-    :param point_pairs_threshold: the minimum number of point pairs the should exist
-    :param verbose: whether to print informative messages about the process (default: False)
-    :return: the transformation history as a list of numpy arrays containing the rotation (R) and translation (T)
-             transformation in each iteration in the format [R | T] and the aligned points as a numpy array M x 2
+    Args:
+        reference_points: Reference point set with shape (N, 2).
+        points: Points to align with shape (M, 2).
+        max_iterations: Maximum number of ICP iterations.
+        distance_threshold: Maximum pairwise distance for correspondences.
+        convergence_translation_threshold: Translation convergence threshold.
+        convergence_rotation_threshold: Rotation convergence threshold.
+        point_pairs_threshold: Minimum point pairs required to continue.
+        verbose: Whether to print progress information.
+
+    Returns:
+        Tuple of (transformation_history, aligned_points).
     """
 
     transformation_history = []
@@ -150,22 +158,20 @@ def icp(reference_points, points, max_iterations=100, distance_threshold=0.3, co
 
 def icp_per_line(reference_points, points, max_iterations=100, distance_threshold=0.3, convergence_translation_threshold=1e-3,
                 convergence_rotation_threshold=1e-4, point_pairs_threshold=10, verbose=False):
-    """
-    An implementation of the Iterative Closest Point algorithm that matches a set of M 2D points to another set
-    of N 2D (reference) points.
+    """Align per-line 2D point sets using Iterative Closest Point.
 
-    :param reference_points: the reference point set as a list of numpy arrays (A x N x 2)
-    :param points: the point that should be aligned to the reference_points set as a list of numpy array (A x M x 2)
-    :param max_iterations: the maximum number of iteration to be executed
-    :param distance_threshold: the distance threshold between two points in order to be considered as a pair
-    :param convergence_translation_threshold: the threshold for the translation parameters (x and y) for the
-                                              transformation to be considered converged
-    :param convergence_rotation_threshold: the threshold for the rotation angle (in rad) for the transformation
-                                               to be considered converged
-    :param point_pairs_threshold: the minimum number of point pairs the should exist
-    :param verbose: whether to print informative messages about the process (default: False)
-    :return: the transformation history as a list of numpy arrays containing the rotation (R) and translation (T)
-             transformation in each iteration in the format [R | T] and the aligned points as a numpy array M x 2
+    Args:
+        reference_points: List of reference point arrays.
+        points: List of point arrays to align.
+        max_iterations: Maximum number of ICP iterations.
+        distance_threshold: Maximum pairwise distance for correspondences.
+        convergence_translation_threshold: Translation convergence threshold.
+        convergence_rotation_threshold: Rotation convergence threshold.
+        point_pairs_threshold: Minimum point pairs required to continue.
+        verbose: Whether to print progress information.
+
+    Returns:
+        Tuple of (transformation_history, aligned_points_array).
     """
 
     transformation_history = []

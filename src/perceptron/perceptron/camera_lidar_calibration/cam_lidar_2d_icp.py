@@ -1,74 +1,76 @@
+"""Estimate camera-to-LiDAR extrinsics using checkerboard pose alignment.
 
-# import rclpy
-# from rclpy.executors import ExternalShutdownException
-# from rclpy.node import Node
-
-"""Extract PointCloud messages from a rosbag2 and write PCD files.
-python3 cam_lidar_2d_icp.py \
-  ./inputs_extrinsic_calibration/images \
-  ./inputs_extrinsic_calibration/pointclouds
+This script loads matched camera images and LiDAR scans, lets the user select
+corresponding board points, aligns them with ICP, and writes the resulting
+extrinsic parameters to a calibration JSON file.
 """
-
-#9/04/2026 9:14pm Could try old invidiual bags - how did Finn get data for camera 4 and camera 5 
-#did I extract bags incorrectly? - could try extract bags again
 
 import os
 import argparse
 import json
-# from datetime import datetime
 
 import cv2
-import cv_bridge
-import open3d as o3d
-
 import numpy as np
-from numpy import linalg as la
-from scipy.spatial.transform import Rotation
-
-import tkinter as tk
-from tkinter import ttk
 from pathlib import Path
+
+import open3d as o3d
 
 import icp_2d
 
 import matplotlib.pyplot as plt
-import matplotlib.backends.backend_tkagg as tkagg 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from mpl_toolkits.mplot3d import Axes3D
-from sklearn import linear_model
 
 from gui import SelectPointsInterface, ImageVisInterface
-
-#import Camera intrinsics
 
 
 home = Path.home()
 
 def load_images_from_folder(folder):
+    """Load images from a directory in sorted filename order.
+
+    Args:
+        folder: Directory containing image files.
+
+    Returns:
+        List of images read with OpenCV in BGR format.
+    """
     images = []
-    print("Reading images from directory: " + folder)    
+    print("Reading images from directory: " + folder)
     for filename in sorted(os.listdir(folder)):
-        img = cv2.imread(os.path.join(folder,filename))
-        print(os.path.join(folder,filename)) # printing file names to verify the order of them in the list
-        if img is not None:
-            # image = cv2.rotate(img, cv2.ROTATE_180)
-            # images.append(image)
-            images.append(img)
+      img = cv2.imread(os.path.join(folder, filename))
+      print(os.path.join(folder, filename))
+      if img is not None:
+        images.append(img)
     return images
 
 def load_clouds_from_folder(folder):
+    """Load point clouds from a directory in sorted filename order.
+
+    Args:
+      folder: Directory containing point cloud files.
+
+    Returns:
+      List of Open3D point cloud objects containing non-empty scans.
+    """
     clouds = []
-    print("Reading point clouds from directory: " + folder)    
+    print("Reading point clouds from directory: " + folder)
     for filename in sorted(os.listdir(folder)):
-        pcd = o3d.io.read_point_cloud(os.path.join(folder,filename))
-        print(os.path.join(folder,filename)) # printing file names to verify the order of them in the list
-        # print(pcd) 
-        if len(pcd.points) > 0:
-            clouds.append(pcd)
+      pcd = o3d.io.read_point_cloud(os.path.join(folder, filename))
+      print(os.path.join(folder, filename))
+      if len(pcd.points) > 0:
+        clouds.append(pcd)
     return clouds
 
 def draw(img, corners, imgpts):
-    # Draw a 3D axis at the OpenCV origin of a checkerboard, for introspection
+    """Draw a 3D axis on an image at the first checkerboard corner.
+
+    Args:
+      img: Image to annotate.
+      corners: Detected checkerboard corners.
+      imgpts: Projected 3D axis points in pixel coordinates.
+
+    Returns:
+      Annotated image.
+    """
     corner = tuple(corners[0].ravel().astype("int32"))
     imgpts = imgpts.astype("int32")
     img = cv2.line(img, corner, tuple(imgpts[0].ravel()), (0,0,255), 2)
@@ -77,6 +79,11 @@ def draw(img, corners, imgpts):
     return img
 
 def main():
+  """Run the extrinsic calibration workflow and save the result.
+
+  Returns:
+    None.
+  """
   parser = argparse.ArgumentParser(description="Calibrate image and laser extrinsics from a collection of checkerboard images and laser scans.")
   parser.add_argument("image_dir", help="Image directory.")
   parser.add_argument("laser_dir", help="Laser directory.")
@@ -96,7 +103,7 @@ def main():
 
   # Load camera intrinsics from calibration JSON produced by cam_intrinsic.py
   with open(args.calibration, "r") as f:
-      calib = json.load(f)
+    calib = json.load(f)
   camera_k = np.array(calib["K"], dtype=float)
   camera_dist = np.array(calib["distortion"], dtype=float).reshape(1, -1)
   print(f"Loaded intrinsics from {args.calibration}")
@@ -107,7 +114,6 @@ def main():
   criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
   # Checkerboard shape, example: 7*10 in checkerboard blocks, 20 mm in checkerboard block size
-  # TODO: Change the checkerboard parameters into those that match with the actual board you are using
   checkerboard_width = 8
   checkerboard_height = 11
   checkerboard_size = 0.0185
@@ -194,16 +200,15 @@ def main():
 
   # Initial transformation to help with the alignment
   # This can be obtained from an initial measurement. 
-  # A good ICP system should not need this initialisation, but sometimes it helps. 
-  # TODO: If you need to, you may put your own desired/measured transformation into the initial_tf 
+  # A good ICP system should not need this initialisation, but sometimes it helps.
   initial_tf = np.identity(3)
   # initial_tf[0, 2] = -0.5
   laser_points_initial_correction = []
-  for this_laser_line in laser_points: 
-      ones = np.ones((this_laser_line.shape[0], 1))
-      lidar_points_h = np.hstack((this_laser_line, ones))
-      transformed_h = (initial_tf @ lidar_points_h.T).T
-      laser_points_initial_correction.append(transformed_h[:, :2])
+  for this_laser_line in laser_points:
+    ones = np.ones((this_laser_line.shape[0], 1))
+    lidar_points_h = np.hstack((this_laser_line, ones))
+    transformed_h = (initial_tf @ lidar_points_h.T).T
+    laser_points_initial_correction.append(transformed_h[:, :2])
 
   # Concatenate the list of arrays into long arrays
   all_lidar_points_initial_corrected = np.vstack(laser_points_initial_correction)
@@ -256,13 +261,13 @@ def main():
   transformation_history, points = icp_2d.icp_per_line(camera_points, laser_points_initial_correction, 300, 0.1, 1e-7, 1e-7, 50, False)
   # Compound the transformations because of the output (transformation_history) is for each iteration
   tf_total = np.eye(3)
-  for tf in transformation_history: 
+  for tf in transformation_history:
     tf_homogeneous = np.eye(3)
     tf_homogeneous[:2, :] = tf
     tf_total = tf_total @ tf_homogeneous
   tf_total = tf_total @ initial_tf
-  print("\n\nThe final results of 2D ICP using custom function") 
-  print(tf_total) 
+  print("\n\nThe final results of 2D ICP using custom function")
+  print(tf_total)
 
   # Introspection - the end result of the alignment
   fig = plt.figure()
@@ -297,29 +302,29 @@ def main():
   # This accounts for the coordinate frame difference between camera (z-forward) and LiDAR (x-forward)
   c, s = np.cos(yaw), np.sin(yaw)
   T_cam_lidar = [
-      [-s,  -c,  0.0,  -y_offset],
-      [ 0.0,  0.0, -1.0,  z_offset],
-      [ c,  -s,  0.0,  -x_offset],
-      [ 0.0,  0.0,  0.0,   1.0],
+    [-s,  -c,  0.0,  -y_offset],
+    [ 0.0,  0.0, -1.0,  z_offset],
+    [ c,  -s,  0.0,  -x_offset],
+    [ 0.0,  0.0,  0.0,   1.0],
   ]
 
   with open(args.calibration, "r") as f:
-      calib = json.load(f)
+    calib = json.load(f)
 
   calib["camera_lidar_parameters"] = {
-      "x": x_offset,
-      "y": y_offset,
-      "z": z_offset,
-      "roll": 0.0,
-      "pitch": 0.0,
-      "yaw": yaw,
+    "x": x_offset,
+    "y": y_offset,
+    "z": z_offset,
+    "roll": 0.0,
+    "pitch": 0.0,
+    "yaw": yaw,
   }
   calib["T_cam_lidar"] = T_cam_lidar
   calib["icp_result_open3d"] = icp_result.tolist()
   calib["icp_result_custom"] = tf_total.tolist()
 
   with open(args.calibration, "w") as f:
-      json.dump(calib, f, indent=4)
+    json.dump(calib, f, indent=4)
 
   print(f"\nExtrinsics saved to {args.calibration}")
 
