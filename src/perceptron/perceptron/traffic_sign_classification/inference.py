@@ -17,7 +17,20 @@ CLASS_NAMES = {
 
 
 def load_model(model_path, device):
-    """Load model checkpoint and restore model weights."""
+    """Load a ResNet-18 checkpoint and return the model in evaluation mode.
+
+    Handles three checkpoint formats:
+      - dict with a "model" key (state-dict wrapped in a training snapshot).
+      - plain state-dict (keys map directly to model parameters).
+      - a serialised full model object (saved with torch.save(model, ...)).
+
+    Args:
+        model_path: Path to the .pth checkpoint file.
+        device:     torch.device to map the weights onto.
+
+    Returns:
+        ResNet18 model ready for inference.
+    """
     model = ResNet18(num_classes=len(CLASS_NAMES)).to(device)
     checkpoint = torch.load(model_path, map_location=device)
 
@@ -26,6 +39,7 @@ def load_model(model_path, device):
     elif isinstance(checkpoint, dict):
         model.load_state_dict(checkpoint)
     else:
+        # Full model object serialised directly
         model = checkpoint.to(device)
 
     model.eval()
@@ -33,8 +47,20 @@ def load_model(model_path, device):
 
 
 def inference(model, device, img):
-    """Run inference on one image and return class prediction with probabilities."""
-    
+    """Classify a single PIL Image and return the predicted sign class name.
+
+    Pre-processes the image to 32x32 with ImageNet-style normalisation to match
+    the training transform, runs a forward pass under torch.no_grad(), and maps
+    the argmax logit to a human-readable class name via CLASS_NAMES.
+
+    Args:
+        model:  Loaded ResNet-18 model (from load_model).
+        device: torch.device the model lives on.
+        img:    PIL Image (RGB) of the sign crop.
+
+    Returns:
+        String class name, e.g. "Stop" or "Turn left".
+    """
     preprocess = transforms.Compose([
         transforms.Resize((32, 32)),
         transforms.ToTensor(),

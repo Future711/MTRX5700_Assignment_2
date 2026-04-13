@@ -3,13 +3,24 @@ import numpy as np
 from PIL import Image
 
 
+# CLAHE (Contrast Limited Adaptive Histogram Equalisation) applied to the V
+# channel to normalise brightness variations before colour thresholding.
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
+# Minimum number of orange pixels required in a row to count that row when
+# fitting the cone boundary polynomials.
 MIN_ORANGE_PX = 10
+# Degree of the polynomial used to model the left/right cone edges.
 POLY_DEG = 2
 
 
 def threshold_orange(img: np.ndarray) -> np.ndarray:
+    """Return a binary mask of orange pixels in *img*.
+
+    Converts the image to HSV, equalises the V channel with CLAHE to handle
+    changing lighting, then combines two hue ranges that together cover the
+    full orange/red wrap-around in HSV (0-20 and 160-180 degrees).
+    """
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     h, s, v = cv2.split(hsv)
     v = clahe.apply(v)
@@ -63,6 +74,22 @@ def build_silhouette_mask(shape, left_poly, right_poly) -> np.ndarray:
     return mask
 
 def detect_cones(frame):
+    """Detect orange traffic cylinders in a BGR camera frame.
+
+    Pipeline:
+      1. Convert to HSV and equalise brightness with CLAHE.
+      2. Build a colour mask covering the orange/red hue wrap-around.
+      3. Apply morphological close (fills gaps) then open (removes noise).
+      4. Extract contours and filter by minimum area, aspect ratio (must be
+         taller than wide), and fill ratio (rejects thin stray edges).
+      5. Iteratively merge boxes that overlap horizontally so that cone
+         fragments caused by a sign occluding part of the cylinder are
+         reunited into a single bounding box.
+
+    Returns:
+        boxes      -- list of (x, y, w, h) bounding rectangles for each cone.
+        colour_mask -- the binary orange colour mask used for detection.
+    """
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     h, s, v = cv2.split(hsv)
     v = clahe.apply(v)
@@ -81,8 +108,10 @@ def detect_cones(frame):
         if area < 800:
             continue
         x, y, w, h = cv2.boundingRect(cnt)
+        # Reject blobs that are wider than tall (not cylinder-like)
         if h < 0.5 * w:
             continue
+        # Reject very sparse blobs (e.g. thin lines or road markings)
         if area / (w * h) < 0.18:
             continue
         boxes.append((x, y, w, h))
@@ -102,6 +131,7 @@ def detect_cones(frame):
                     continue
                 x2, y2, w2, h2 = boxes[j]
                 jx2, jy2 = x2 + w2, y2 + h2
+                # Allow a 20-pixel horizontal slack to catch near-adjacent fragments
                 if x2 < mx2 + 20 and jx2 > mx - 20:
                     mx  = min(mx,  x2)
                     my  = min(my,  y2)
@@ -116,6 +146,20 @@ def detect_cones(frame):
     return boxes, colour_mask
 
 def detect_sign(cone_crop, orange_mask=None, left_poly=None, right_poly=None):
+    """Isolate and return the traffic sign mounted on a cone crop as a PIL Image.
+
+    The sign sits *inside* the cylinder silhouette but is not orange itself.
+    Strategy:
+      1. Build (or reuse) the orange mask and cone boundary polynomials.
+      2. Apply the silhouette mask to the orange mask, setting pixels outside
+         the cone boundaries to 255 (white/orange).
+      3. Invert so that non-orange regions inside the cone become white blobs.
+      4. Find the largest such blob — that is the sign face.
+      5. Crop the sign, centre it in a square black canvas and return a PIL
+         Image ready for the classifier (which expects square inputs).
+
+    Returns None if the cone boundary cannot be fitted or no blob is found.
+    """
     if orange_mask is None:
         orange_mask = threshold_orange(cone_crop)
 
@@ -125,15 +169,19 @@ def detect_sign(cone_crop, orange_mask=None, left_poly=None, right_poly=None):
     if left_poly is None:
         return None
 
+    # Mask out everything outside the cone shape, then invert to find non-orange regions
     silhouette = apply_silhouette(orange_mask, left_poly, right_poly)
     inverted = cv2.bitwise_not(silhouette)
     contours, _ = cv2.findContours(inverted, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
         return None
 
+    # The largest non-orange blob inside the cone is assumed to be the sign
     largest = max(contours, key=cv2.contourArea)
     x, y, w, h = cv2.boundingRect(largest)
 
+    # Centre the sign crop in a square canvas so the classifier receives a
+    # consistent aspect ratio regardless of the sign's own proportions.
     side = max(w, h)
     square = np.zeros((side, side, 3), dtype=np.uint8)
     x_off = (side - w) // 2
